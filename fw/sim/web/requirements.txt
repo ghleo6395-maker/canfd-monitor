@@ -1,0 +1,4 @@
+# CAN database metadata import (official PyPI release; 1.3.0 is yanked).
+canmatrix==1.3.3
+attrs==26.1.0
+click==8.5.0

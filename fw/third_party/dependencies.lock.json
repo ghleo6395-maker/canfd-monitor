@@ -1,0 +1,87 @@
+{
+  "format": 1,
+  "target": "STM32H743VIT6 Rev D",
+  "date": "2026-10-24",
+  "dependencies": [
+    {
+      "name": "STM32 H7 HAL",
+      "version": "v1.11.6",
+      "repo": "https://github.com/STMicroelectronics/stm32h7xx-hal-driver",
+      "commit": "a1996eed9172b59887bafaaa0ea1816ea14d48b5",
+      "path": "vendor/stm32_hal",
+      "license": "BSD-3-Clause",
+      "local_patch_manifest": "third_party/patches/STM32H7_SDMMC_cooperative_manifest.json"
+    },
+    {
+      "name": "STM32 H7 CMSIS device",
+      "version": "v1.10.7",
+      "repo": "https://github.com/STMicroelectronics/cmsis-device-h7",
+      "commit": "8f922cdc7cc6de2344e75ddd657889f4ff761790",
+      "path": "vendor/cmsis_device",
+      "license": "Apache-2.0",
+      "local_adaptation": "startup copied to platform, adds early PE2 power hold"
+    },
+    {
+      "name": "CMSIS Core",
+      "version": "5.9.0",
+      "repo": "https://github.com/ARM-software/CMSIS_5",
+      "commit": "2b7495b8535bdcb306dac29b9ded4cfb679d7e5c",
+      "path": "vendor/cmsis_core",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "TinyUSB",
+      "version": "0.21.0",
+      "repo": "https://github.com/hathach/tinyusb",
+      "commit": "dae3f9a366bfcddbf9dcf1b48d7500286a849539",
+      "path": "vendor/tinyusb",
+      "license": "MIT"
+    },
+    {
+      "name": "LVGL",
+      "version": "v9.5.0",
+      "repo": "https://github.com/lvgl/lvgl",
+      "commit": "85aa60d18b3d5e5588d7b247abf90198f07c8a63",
+      "path": "vendor/lvgl",
+      "license": "MIT with component notices retained"
+    },
+    {
+      "name": "FatFs",
+      "version": "R0.16 + official patch1 + patch2",
+      "repo": "https://github.com/abbrev/fatfs",
+      "commit": "30ca13c62615df0d2e9104ab41256985b96590c1",
+      "path": "vendor/fatfs",
+      "license": "ChaN single-condition",
+      "patch_manifest": "third_party/patches/FatFs_R0.16_manifest.json"
+    },
+    {
+      "name": "Source Han Sans SC font subset",
+      "source": "LVGL scripts/built_in_font/SourceHanSansSC-Normal.otf",
+      "license": "OFL-1.1",
+      "generated_name": "ui_font_revd_16",
+      "license_file": "platform/stm32h743_revd/fonts/LICENSE.SourceHanSansSC.txt"
+    },
+    {
+      "name": "can-utils codec adaptation",
+      "repo": "https://github.com/linux-can/can-utils",
+      "commit": "834ceef1f1eabec67625389172eebf1050d2f42b",
+      "license": "BSD-3-Clause option",
+      "path": "services/logfmt"
+    },
+    {
+      "name": "FreeRTOS Kernel",
+      "version": "V11.3.2",
+      "repo": "https://github.com/FreeRTOS/FreeRTOS-Kernel",
+      "commit": "8a59a4b19bf72977819feddef87d41163ced7004",
+      "path": "vendor/freertos",
+      "license": "MIT",
+      "release_url": "https://github.com/FreeRTOS/FreeRTOS-Kernel/releases/tag/V11.3.2",
+      "release_published_at": "2026-10-16T17:03:41Z",
+      "archive_sha256": "c6174ebf8ba48b9a4cefbd4adc3f24caafc52f13995ffd621ab133d8de031b05",
+      "selected_port": "portable/GCC/ARM_CM7/r0p1",
+      "allocation": "static tasks, queues, semaphores; dynamic kernel allocation disabled",
+      "target": "Makefile.freertos only"
+    }
+  ],
+  "firmware_revision": "revd-dma-pipeline-20261024"
+}

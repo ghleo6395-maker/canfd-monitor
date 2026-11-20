@@ -1,0 +1,29 @@
+{
+  "component": "FatFs",
+  "base_version": "R0.16",
+  "base_repository": "https://github.com/abbrev/fatfs",
+  "base_commit": "30ca13c62615df0d2e9104ab41256985b96590c1",
+  "upstream_patch_index": "https://elm-chan.org/fsw/ff/patches.html",
+  "source_file": "fw/vendor/fatfs/source/ff.c",
+  "original_sha256": "dbeae3d7d22dbc070983e31af897fa5e43d29c726a0a240fe9589ffe2ec0ef1e",
+  "normalization": "ff.c CRLF converted to LF before applying official LF diffs; no other source changes",
+  "patches": [
+    {
+      "order": 1,
+      "file": "fw/third_party/patches/ff16p1.diff",
+      "url": "https://elm-chan.org/fsw/ff/patch/ff16p1.diff",
+      "date": "2025-09-13",
+      "sha256": "7996ddc3135f3d534a8153f7d75d587030e5c8551b003c3b7ee823ffb7fc64bf"
+    },
+    {
+      "order": 2,
+      "file": "fw/third_party/patches/ff16p2.diff",
+      "url": "https://elm-chan.org/fsw/ff/patch/ff16p2.diff",
+      "date": "2026-07-10",
+      "sha256": "5cd39f1fc299f0f1dec9fa1ce544dc0bc048b2f6eb3b8161476ed20f9cf1e290"
+    }
+  ],
+  "final_sha256": "3c30280ffe2d0fb19a5241d9ed9f20a2c3911c2861652ebf6ad57f74fb369250",
+  "verified_date": "2026-10-24",
+  "verification": "Neither patch was present initially. Each patch passed patch --dry-run after LF normalization, then applied in sequence. Production FatFs plus storage/diskio were exercised under AddressSanitizer and UndefinedBehaviorSanitizer on a RAM card."
+}

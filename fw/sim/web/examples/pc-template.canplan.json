@@ -1,0 +1,115 @@
+{
+  "format": "canfd-send-plan",
+  "version": 1,
+  "channel_mask": 2,
+  "channels": [
+    {
+      "channel": 2,
+      "id_gap_ms": 20,
+      "entries": [
+        {
+          "slot": 1,
+          "id": "200",
+          "extended": false,
+          "fd": false,
+          "brs": false,
+          "rtr": false,
+          "length": 8,
+          "data": "00 01 02 03 04 05 06 07",
+          "period_ms": 0,
+          "enabled": true,
+          "repeat_count": 3,
+          "frame_gap_ms": 10,
+          "cycle_ms": 100,
+          "dynamic": {
+            "counter_byte": 0,
+            "counter_bits": 0,
+            "counter_max": 0,
+            "counter_next": 0,
+            "checksum": "none",
+            "checksum_byte": 0,
+            "checksum_from": 0,
+            "checksum_to": 0
+          }
+        },
+        {
+          "slot": 2,
+          "id": "3A1",
+          "extended": false,
+          "fd": true,
+          "brs": true,
+          "rtr": false,
+          "length": 64,
+          "data": "00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F 20 21 22 23 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F 30 31 32 33 34 35 36 37 38 39 3A 3B 3C 3D 3E 3F",
+          "period_ms": 0,
+          "enabled": true,
+          "repeat_count": 1,
+          "frame_gap_ms": 10,
+          "cycle_ms": 100,
+          "dynamic": {
+            "counter_byte": 0,
+            "counter_bits": 8,
+            "counter_max": 255,
+            "counter_next": 0,
+            "checksum": "xor",
+            "checksum_byte": 63,
+            "checksum_from": 0,
+            "checksum_to": 62
+          }
+        },
+        {
+          "slot": 3,
+          "id": "18FF50E5",
+          "extended": true,
+          "fd": false,
+          "brs": false,
+          "rtr": false,
+          "length": 8,
+          "data": "00 01 02 03 04 05 06 07",
+          "period_ms": 0,
+          "enabled": false,
+          "repeat_count": 1,
+          "frame_gap_ms": 10,
+          "cycle_ms": 100,
+          "dynamic": {
+            "counter_byte": 0,
+            "counter_bits": 0,
+            "counter_max": 0,
+            "counter_next": 0,
+            "checksum": "none",
+            "checksum_byte": 0,
+            "checksum_from": 0,
+            "checksum_to": 0
+          }
+        },
+        {
+          "slot": 4,
+          "id": "7DF",
+          "extended": false,
+          "fd": false,
+          "brs": false,
+          "rtr": true,
+          "length": 8,
+          "data": "",
+          "period_ms": 0,
+          "enabled": false,
+          "repeat_count": 1,
+          "frame_gap_ms": 10,
+          "cycle_ms": 100,
+          "dynamic": {
+            "counter_byte": 0,
+            "counter_bits": 0,
+            "counter_max": 0,
+            "counter_next": 0,
+            "checksum": "none",
+            "checksum_byte": 0,
+            "checksum_from": 0,
+            "checksum_to": 0
+          }
+        }
+      ]
+    }
+  ],
+  "description": "统一上位机模板：CAN2每轮发送3次0x200，再发送一条64字节FD。请按实际用途编辑数据；导入不会启动发送。",
+  "project": "示例项目 - 单路台架"
+}

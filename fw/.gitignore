@@ -1,0 +1,5 @@
+/build/
+/.venv*/
+/vendor/lvgl/
+/sim/sdcard/
+__pycache__/

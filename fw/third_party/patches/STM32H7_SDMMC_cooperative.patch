@@ -1,0 +1,194 @@
+--- a/Src/stm32h7xx_ll_sdmmc.c
++++ b/Src/stm32h7xx_ll_sdmmc.c
+@@ -172,6 +172,46 @@
+ /* Private function prototypes -----------------------------------------------*/
+ static uint32_t SDMMC_GetCmdError(SDMMC_TypeDef *SDMMCx);
+ 
++/* Rev D local adaptation: keep CAN ingestion alive during command-response
++ * waits as well as the SD data-DMA wait. No protocol parsing is changed.
++ * Thread context keeps the upstream millisecond deadline in real elapsed time;
++ * SDMMC ISR context never enters application code and limits command-response
++ * polling to 1 ms using the independent 1 MHz TIM2 clock. CMD12 here requests
++ * SDMMC_RESPONSE_SHORT (R1), not a card-programming/busy-D0 wait.
++ * Patch provenance: third_party/patches/STM32H7_SDMMC_cooperative_manifest.json */
++#if defined(CANFD_REVD_TARGET)
++extern void revd_sdmmc_cmd_wait_poll(void);
++typedef struct
++{
++  uint32_t started_ms, started_us, iterations, timeout_ms, irq;
++} revd_sdmmc_wait_t;
++static revd_sdmmc_wait_t revd_sdmmc_wait_begin(uint32_t timeout_ms)
++{
++  revd_sdmmc_wait_t wait = {0};
++  wait.irq = __get_IPSR();
++  wait.timeout_ms = timeout_ms;
++  wait.started_ms = HAL_GetTick();
++  if (wait.irq != 0U) wait.started_us = TIM2->CNT;
++  return wait;
++}
++static uint32_t revd_sdmmc_wait_expired(revd_sdmmc_wait_t *wait)
++{
++  if ((++wait->iterations & 255U) != 0U) return 0U;
++  if (wait->irq != 0U)
++  {
++    /* SysTick can have lower priority than SDMMC, so it cannot time this ISR. */
++    return (uint32_t)(TIM2->CNT - wait->started_us) >= 1000U;
++  }
++  revd_sdmmc_cmd_wait_poll();
++  return (uint32_t)(HAL_GetTick() - wait->started_ms) >= wait->timeout_ms;
++}
++#define REVD_SDMMC_WAIT_BEGIN(timeout) revd_sdmmc_wait_t revd_wait = revd_sdmmc_wait_begin(timeout)
++#define REVD_SDMMC_WAIT_POLL() do { if (revd_sdmmc_wait_expired(&revd_wait)) return SDMMC_ERROR_TIMEOUT; } while (0)
++#else
++#define REVD_SDMMC_WAIT_BEGIN(timeout)
++#define REVD_SDMMC_WAIT_POLL()
++#endif
++
+ /* Exported functions --------------------------------------------------------*/
+ 
+ /** @defgroup SDMMC_LL_Exported_Functions SDMMC Low Layer Exported Functions
+@@ -398,13 +438,14 @@
+   */
+ uint32_t SDMMC_GetResponse(const SDMMC_TypeDef *SDMMCx, uint32_t Response)
+ {
+-  uint32_t tmp;
++  /* uintptr_t preserves the same ARM ABI and permits native register models. */
++  uintptr_t tmp;
+ 
+   /* Check the parameters */
+   assert_param(IS_SDMMC_RESP(Response));
+ 
+   /* Get the response */
+-  tmp = (uint32_t)(&(SDMMCx->RESP1)) + Response;
++  tmp = (uintptr_t)(&(SDMMCx->RESP1)) + Response;
+ 
+   return (*(__IO uint32_t *) tmp);
+ }
+@@ -1360,6 +1401,7 @@
+   /* 8 is the number of required instructions cycles for the below loop statement.
+   The Timeout is expressed in ms */
+   uint32_t count = Timeout * (SystemCoreClock / 8U / 1000U);
++  REVD_SDMMC_WAIT_BEGIN(Timeout);
+ 
+   do
+   {
+@@ -1367,6 +1409,7 @@
+     {
+       return SDMMC_ERROR_TIMEOUT;
+     }
++    REVD_SDMMC_WAIT_POLL();
+     sta_reg = SDMMCx->STA;
+   } while (((sta_reg & (SDMMC_FLAG_CCRCFAIL | SDMMC_FLAG_CMDREND | SDMMC_FLAG_CTIMEOUT |
+                         SDMMC_FLAG_BUSYD0END)) == 0U) || ((sta_reg & SDMMC_FLAG_CMDACT) != 0U));
+@@ -1493,6 +1536,7 @@
+   /* 8 is the number of required instructions cycles for the below loop statement.
+   The SDMMC_CMDTIMEOUT is expressed in ms */
+   uint32_t count = SDMMC_CMDTIMEOUT * (SystemCoreClock / 8U / 1000U);
++  REVD_SDMMC_WAIT_BEGIN(SDMMC_CMDTIMEOUT);
+ 
+   do
+   {
+@@ -1500,6 +1544,7 @@
+     {
+       return SDMMC_ERROR_TIMEOUT;
+     }
++    REVD_SDMMC_WAIT_POLL();
+     sta_reg = SDMMCx->STA;
+   } while (((sta_reg & (SDMMC_FLAG_CCRCFAIL | SDMMC_FLAG_CMDREND | SDMMC_FLAG_CTIMEOUT)) == 0U) ||
+            ((sta_reg & SDMMC_FLAG_CMDACT) != 0U));
+@@ -1537,6 +1582,7 @@
+   /* 8 is the number of required instructions cycles for the below loop statement.
+   The SDMMC_CMDTIMEOUT is expressed in ms */
+   uint32_t count = SDMMC_CMDTIMEOUT * (SystemCoreClock / 8U / 1000U);
++  REVD_SDMMC_WAIT_BEGIN(SDMMC_CMDTIMEOUT);
+ 
+   do
+   {
+@@ -1544,6 +1590,7 @@
+     {
+       return SDMMC_ERROR_TIMEOUT;
+     }
++    REVD_SDMMC_WAIT_POLL();
+     sta_reg = SDMMCx->STA;
+   } while (((sta_reg & (SDMMC_FLAG_CCRCFAIL | SDMMC_FLAG_CMDREND | SDMMC_FLAG_CTIMEOUT)) == 0U) ||
+            ((sta_reg & SDMMC_FLAG_CMDACT) != 0U));
+@@ -1576,6 +1623,7 @@
+   /* 8 is the number of required instructions cycles for the below loop statement.
+   The SDMMC_CMDTIMEOUT is expressed in ms */
+   uint32_t count = SDMMC_CMDTIMEOUT * (SystemCoreClock / 8U / 1000U);
++  REVD_SDMMC_WAIT_BEGIN(SDMMC_CMDTIMEOUT);
+ 
+   do
+   {
+@@ -1583,6 +1631,7 @@
+     {
+       return SDMMC_ERROR_TIMEOUT;
+     }
++    REVD_SDMMC_WAIT_POLL();
+     sta_reg = SDMMCx->STA;
+   } while (((sta_reg & (SDMMC_FLAG_CCRCFAIL | SDMMC_FLAG_CMDREND | SDMMC_FLAG_CTIMEOUT)) == 0U) ||
+            ((sta_reg & SDMMC_FLAG_CMDACT) != 0U));
+@@ -1623,6 +1672,7 @@
+   /* 8 is the number of required instructions cycles for the below loop statement.
+   The SDMMC_CMDTIMEOUT is expressed in ms */
+   uint32_t count = SDMMC_CMDTIMEOUT * (SystemCoreClock / 8U / 1000U);
++  REVD_SDMMC_WAIT_BEGIN(SDMMC_CMDTIMEOUT);
+ 
+   do
+   {
+@@ -1630,6 +1680,7 @@
+     {
+       return SDMMC_ERROR_TIMEOUT;
+     }
++    REVD_SDMMC_WAIT_POLL();
+     sta_reg = SDMMCx->STA;
+   } while (((sta_reg & (SDMMC_FLAG_CCRCFAIL | SDMMC_FLAG_CMDREND | SDMMC_FLAG_CTIMEOUT)) == 0U) ||
+            ((sta_reg & SDMMC_FLAG_CMDACT) != 0U));
+@@ -1711,6 +1762,7 @@
+   /* 8 is the number of required instructions cycles for the below loop statement.
+   The SDMMC_CMDTIMEOUT is expressed in ms */
+   uint32_t count = SDMMC_CMDTIMEOUT * (SystemCoreClock / 8U / 1000U);
++  REVD_SDMMC_WAIT_BEGIN(SDMMC_CMDTIMEOUT);
+ 
+   do
+   {
+@@ -1718,6 +1770,7 @@
+     {
+       return SDMMC_ERROR_TIMEOUT;
+     }
++    REVD_SDMMC_WAIT_POLL();
+     sta_reg = SDMMCx->STA;
+   } while (((sta_reg & (SDMMC_FLAG_CCRCFAIL | SDMMC_FLAG_CMDREND | SDMMC_FLAG_CTIMEOUT)) == 0U) ||
+            ((sta_reg & SDMMC_FLAG_CMDACT) != 0U));
+@@ -1783,6 +1836,7 @@
+   /* 8 is the number of required instructions cycles for the below loop statement.
+   The SDMMC_CMDTIMEOUT is expressed in ms */
+   uint32_t count = SDMMC_CMDTIMEOUT * (SystemCoreClock / 8U / 1000U);
++  REVD_SDMMC_WAIT_BEGIN(SDMMC_CMDTIMEOUT);
+ 
+   do
+   {
+@@ -1790,6 +1844,7 @@
+     {
+       return SDMMC_ERROR_TIMEOUT;
+     }
++    REVD_SDMMC_WAIT_POLL();
+     sta_reg = SDMMCx->STA;
+   } while (((sta_reg & (SDMMC_FLAG_CCRCFAIL | SDMMC_FLAG_CMDREND | SDMMC_FLAG_CTIMEOUT)) == 0U) ||
+            ((sta_reg & SDMMC_FLAG_CMDACT) != 0U));
+@@ -1843,6 +1898,7 @@
+   /* 8 is the number of required instructions cycles for the below loop statement.
+   The SDMMC_CMDTIMEOUT is expressed in ms */
+   uint32_t count = SDMMC_CMDTIMEOUT * (SystemCoreClock / 8U / 1000U);
++  REVD_SDMMC_WAIT_BEGIN(SDMMC_CMDTIMEOUT);
+ 
+   do
+   {
+@@ -1850,6 +1906,7 @@
+     {
+       return SDMMC_ERROR_TIMEOUT;
+     }
++    REVD_SDMMC_WAIT_POLL();
+ 
+   } while (!__SDMMC_GET_FLAG(SDMMCx, SDMMC_FLAG_CMDSENT));
+ 

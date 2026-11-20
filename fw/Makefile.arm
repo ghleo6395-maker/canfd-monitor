@@ -1,0 +1,80 @@
+# Self-contained STM32H743VI Rev D build. Default is the preserved bare-metal A target.
+# make -f Makefile.freertos builds the separate B target with identical driver buffers.
+FREERTOS ?= 0
+BOARD ?= revd
+ifeq ($(BOARD),reve)
+ifneq ($(FREERTOS),0)
+$(error Rev E is maintained as bare metal only)
+endif
+BUILD_DIR := build/reve
+TARGET := $(BUILD_DIR)/canfd-reve
+else ifeq ($(BOARD),revd)
+ifeq ($(FREERTOS),1)
+BUILD_DIR := build/revd-freertos
+TARGET := $(BUILD_DIR)/canfd-revd-freertos
+else
+BUILD_DIR := build/revd
+TARGET := $(BUILD_DIR)/canfd-revd
+endif
+else
+$(error BOARD must be revd or reve)
+endif
+CROSS ?= arm-none-eabi-
+ARM_CC := $(CROSS)gcc
+ARM_OBJCOPY := $(CROSS)objcopy
+ARM_SIZE := $(CROSS)size
+PLAT := platform/stm32h743_revd
+CPU := -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard
+DEFS := -DSTM32H743xx -DUSER_VECT_TAB_ADDRESS -DUSE_HAL_DRIVER -DUSE_PWR_LDO_SUPPLY -DHSE_VALUE=25000000U -DLV_CONF_INCLUDE_SIMPLE -DCANFD_REVD_TARGET
+ifeq ($(BOARD),reve)
+DEFS += -DCANFD_REVE_TARGET
+endif
+INC := -I. -I$(PLAT) -I$(PLAT)/fatfs_conf -Ivendor/stm32_hal/Inc -Ivendor/cmsis_device/Include -Ivendor/cmsis_core/CMSIS/Core/Include -Ivendor/fatfs/source -Ivendor/tinyusb/src -Ivendor/lvgl
+ifeq ($(FREERTOS),1)
+DEFS += -DREVD_FREERTOS
+INC += -I$(PLAT)/rtos -Ivendor/freertos/include -Ivendor/freertos/portable/GCC/ARM_CM7/r0p1
+RTOS_NAMES := tasks queue list event_groups stream_buffer
+RTOS := $(addprefix vendor/freertos/,$(addsuffix .c,$(RTOS_NAMES))) vendor/freertos/portable/GCC/ARM_CM7/r0p1/port.c $(wildcard $(PLAT)/rtos/*.c)
+endif
+ARM_CFLAGS := $(CPU) $(DEFS) $(INC) -include $(PLAT)/fatfs_conf/ffconf.h -std=gnu11 -Os -g3 -ffunction-sections -fdata-sections -fno-common -Wall -Wextra -Werror -Wno-unused-parameter -fstack-usage -MMD -MP
+# These platform-independent device services also drive the desktop simulator.
+# env_sim/sim_api/file_port_host remain host-only; board file ports live in storage_sd.
+DEVICE := sim/tx_sequence.c sim/tx_scope.c sim/send_plan.c sim/local_files_ui.c
+CORE := $(wildcard services/*/*.c) app/app.c app/ui/core/ui_sm.c $(DEVICE)
+PLATFORM := $(wildcard $(PLAT)/*.c)
+HAL_NAMES := hal hal_cortex hal_rcc hal_rcc_ex hal_pwr hal_pwr_ex hal_gpio hal_flash hal_flash_ex hal_adc hal_adc_ex hal_fdcan hal_i2c hal_i2c_ex hal_spi hal_spi_ex hal_tim hal_tim_ex hal_sd hal_dma hal_dma_ex hal_mdma hal_rng ll_sdmmc
+HAL := $(addprefix vendor/stm32_hal/Src/stm32h7xx_,$(addsuffix .c,$(HAL_NAMES)))
+USB_NAMES := tusb common/tusb_fifo device/usbd class/cdc/cdc_device class/msc/msc_device portable/synopsys/dwc2/dcd_dwc2 portable/synopsys/dwc2/dwc2_common
+USB := $(addprefix vendor/tinyusb/src/,$(addsuffix .c,$(USB_NAMES)))
+# Filesystem enumeration order must not alter link layout after copying the
+# self-contained source bundle to another directory or machine.
+LVGL := $(sort $(shell find vendor/lvgl/src -name '*.c'))
+SOURCES := $(CORE) $(PLATFORM) $(HAL) $(USB) $(LVGL) $(RTOS) vendor/fatfs/source/ff.c vendor/fatfs/source/ffunicode.c vendor/cmsis_device/Source/Templates/system_stm32h7xx.c
+OBJS := $(addprefix $(BUILD_DIR)/obj/,$(SOURCES:.c=.o)) $(BUILD_DIR)/obj/$(PLAT)/startup_stm32h743xx.o
+.PHONY: all clean size check flash
+all: $(TARGET).elf $(TARGET).bin $(TARGET).hex size
+$(OBJS): Makefile.arm $(if $(filter 1,$(FREERTOS)),Makefile.freertos)
+$(TARGET).elf: $(OBJS) $(PLAT)/STM32H743VITX_FLASH.ld
+	$(ARM_CC) $(CPU) -nostartfiles --specs=nano.specs --specs=nosys.specs -T$(PLAT)/STM32H743VITX_FLASH.ld -Wl,--gc-sections,-Map=$(TARGET).map,--cref -Wl,--print-memory-usage -o $@ $(OBJS) -Wl,--start-group -lc -lm -Wl,--end-group
+$(TARGET).bin: $(TARGET).elf
+	$(ARM_OBJCOPY) -O binary $< $@
+$(TARGET).hex: $(TARGET).elf
+	$(ARM_OBJCOPY) -O ihex $< $@
+$(BUILD_DIR)/obj/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(ARM_CC) $(ARM_CFLAGS) -c $< -o $@
+$(BUILD_DIR)/obj/%.o: %.s
+	@mkdir -p $(dir $@)
+	$(ARM_CC) $(CPU) $(DEFS) -x assembler-with-cpp -c $< -o $@
+size: $(TARGET).elf
+	$(ARM_SIZE) $<
+clean:
+	rm -rf $(BUILD_DIR)
+-include $(OBJS:.o=.d)
+
+check: all
+	python3 tools/verify_firmware.py --board $(BOARD) $(TARGET)
+# Explicit user-invoked SWD programming. Never performs a mass erase.
+CUBEPROGRAMMER_CLI ?= STM32_Programmer_CLI
+flash: check
+	"$(CUBEPROGRAMMER_CLI)" -c port=SWD mode=UR reset=HWrst -w $(TARGET).hex -v -rst

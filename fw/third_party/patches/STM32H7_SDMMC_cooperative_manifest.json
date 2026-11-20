@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "upstream_repo": "https://github.com/STMicroelectronics/stm32h7xx-hal-driver",
+  "upstream_commit": "a1996eed9172b59887bafaaa0ea1816ea14d48b5",
+  "version": "v1.11.6",
+  "file": "vendor/stm32_hal/Src/stm32h7xx_ll_sdmmc.c",
+  "before_sha256": "f2ec1f1593e1a381c39b0e9a72961c1d721e346271ed1c6bcdbea032d6eab91b",
+  "after_sha256": "2fa8054167618b06ee3800fd5b9a93f147fcb3713ab0cee5bc497759fd241f0c",
+  "patch": "STM32H7_SDMMC_cooperative.patch",
+  "patch_sha256": "a1037747158b2b56c9e6c3a3925cb35bc1c73f1e6426b5769cdd3cee6ef2c4ba",
+  "condition": "CANFD_REVD_TARGET",
+  "coverage": "SDMMC_GetCmdResp1 through GetCmdResp7 and private GetCmdError; 8 loops",
+  "thread": "Poll board hook every 256 iterations, keep upstream timeout in real HAL_GetTick elapsed milliseconds",
+  "irq": "Never call board hook; 1000 us TIM2 limit on command-response polling; upstream response/error decoding unchanged",
+  "native_test_support": "SDMMC_GetResponse pointer temporary changed uint32_t -> uintptr_t, identical width on STM32H743; avoids 64-bit native register-model pointer truncation"
+}

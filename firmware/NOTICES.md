@@ -1,0 +1,23 @@
+# Notices accompanying canfd-reve.bin
+
+The project application and board sources are provided in [fw](../fw/). Files carrying an SPDX license identifier retain the terms identified in those files. Files carrying existing third-party notices retain their individual terms. These component notices establish no additional repository-wide license. For project files explicitly marked MIT, the permission text is provided in [MIT terms](licenses/MIT-for-marked-sources.txt).
+
+## Firmware, MCU and USB
+
+- STM32H7 HAL v1.11.6, upstream revision `a1996ee`, includes Copyright (c) 2017 and 2021 STMicroelectronics. TinyUSB's DWC2 register header includes portions Copyright (c) 2019 STMicroelectronics under the same BSD-3-Clause conditions. The firmware's SDMMC driver incorporates the cooperative-wait patch in the source distribution. [ST BSD-3-Clause](licenses/STM32-HAL-BSD-3-Clause.txt)
+- CMSIS Core 5.9.0, revision `2b7495b`, includes material Copyright (c) 2009–2018, 2009–2021, 2009–2022, 2017–2020 and 2020–2021 Arm Limited. CMSIS Device H7 v1.10.7, revision `8f922cd`, includes Copyright (c) 2017 and 2019 STMicroelectronics. The GCC startup file has project changes for early PE2 assertion and internal memory initialization. [CMSIS Core Apache-2.0](licenses/CMSIS-Core-Apache-2.0.txt) · [CMSIS Device Apache-2.0](licenses/CMSIS-Device-Apache-2.0.txt)
+- TinyUSB 0.21.0, revision `dae3f9a`. Included MIT notices credit Ha Thach (tinyusb.org), with source years 2019, 2021, 2022, 2024 and 2024–2025, William D. Jones (2019), Jan Duempelmann (2020) and Reinhard Panhuber (2020). The composite USB descriptor is adapted from TinyUSB's CDC/MSC example. [TinyUSB MIT](licenses/TinyUSB-MIT.txt)
+- FatFs R0.16 with the two official patches, Copyright (C) 2025, ChaN, all right reserved. The portable candump codec incorporates the can-utils adaptation under its BSD-3-Clause option. [FatFs](licenses/FatFs.txt) · [can-utils attribution and license](licenses/can-utils.txt)
+
+## User interface, glyphs and allocator
+
+- LVGL v9.5.0, revision `85aa60d`, supplies the user interface and its rendering components. The input subsystem includes notices from EDGEMTech Ltd. (2024). Matthew Conte's TLSF allocator is included under its BSD terms. LVGL's mathematical routines also carry a notice from Gaëtan Renaudeau (2014). [LVGL MIT](licenses/LVGL-MIT.txt) · [TLSF copyright and conditions](licenses/LVGL-TLSF.txt) · [LVGL math attribution](licenses/LVGL-math.txt)
+- `ui_font_revd_16` is a bitmap subset of Adobe Source Han Sans SC, produced by converting and subsetting the original glyphs. Copyright 2014–2021 Adobe. The reserved font name is “Source.” [SIL Open Font License and copyright](licenses/SourceHanSansSC-OFL.txt)
+- `lv_font_montserrat_14` uses converted glyphs from Montserrat and Font Awesome Free 5. Copyright 2011 The Montserrat Project Authors. Font Awesome Free by Fonticons, Inc. contributed the included icons, converted to the LVGL bitmap font. The Font Awesome distribution states the SIL OFL 1.1 font and CC BY 4.0 icon terms and supplies attribution guidance. [Montserrat OFL](licenses/Montserrat-OFL.txt) · [Font Awesome notice and font terms](licenses/FontAwesome5.txt) · [Font Awesome](https://fontawesome.com/license/free) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+## Compiler runtime
+
+The released binary was compiled with the distributed Arm GNU Toolchain 15.2.Rel1 for arm-none-eabi and the standard Arm GNU C compiler. Live image sections from its static runtime archives come from newlib-nano (`libc_nano.a`) and GCC integer-division helpers (`libgcc.a`). Notices are taken from the matching [official Arm GNU Toolchain 15.2.Rel1 source snapshot](https://developer.arm.com/-/media/Files/downloads/gnu/15.2.rel1/srcrel/arm-gnu-toolchain-src-snapshot-15.2.rel1.tar.xz).
+
+- The newlib distribution contains portions under individual file licenses. This product includes software developed by the University of California, Berkeley, and its contributors. See the collection-wide and individual source notices. [COPYING.NEWLIB](licenses/newlib-COPYING.NEWLIB.txt) · [Additional file-level notices](licenses/newlib-selected-notices.txt)
+- The included libgcc routines are covered by GPLv3-or-later with the GCC Runtime Library Exception, version 3.1. The unmodified compiler was used for an eligible compilation process. The exception permits conveying the resulting target code under its applicable terms. [Copyright and source notices](licenses/GCC-runtime-headers.txt) · [GPLv3](licenses/GCC-COPYING3.txt) · [GCC Runtime Library Exception](licenses/GCC-COPYING.RUNTIME.txt)

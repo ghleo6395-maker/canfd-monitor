@@ -1,0 +1,3 @@
+# FreeRTOS B target; the A target remains make -f Makefile.arm.
+FREERTOS := 1
+include Makefile.arm

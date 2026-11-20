@@ -1,0 +1,41 @@
+{
+  "schema": "revd-ab-environment-v1",
+  "physical_hardware_tested": false,
+  "modes": {
+    "bare-metal": {
+      "board_revision": "Rev D",
+      "board_identity": "FILL_WITH_LOCAL_BOARD_LABEL",
+      "mcu": "STM32H743VIT6",
+      "clock_hz": {"cpu": 400000000, "hclk": 200000000, "fdcan": 80000000, "sdmmc": 100000000, "spi4": 12500000},
+      "cache": {"icache": true, "dcache": false},
+      "card": {"model": "FILL_ME", "identity_hash": "FILL_ME", "capacity_bytes": 0, "filesystem": "FAT32"},
+      "capacities": {"can_ingress": 512, "sd_record": 1024, "frame_ring": 512},
+      "can_bitrates": {"nominal": [500000, 500000], "data": [2000000, 2000000]},
+      "power": "FILL_WITH_SAME_SUPPLY_CONDITION",
+      "bench_config": {"segment_kib": 64, "rotate_ms": 1000, "refresh_ms": 100},
+      "busy_workload": {"kind": "physical-card", "conditioning": "FILL_WITH_REPEATED_CARD_CONDITIONING"}
+    },
+    "freertos": {
+      "board_revision": "Rev D",
+      "board_identity": "FILL_WITH_LOCAL_BOARD_LABEL",
+      "mcu": "STM32H743VIT6",
+      "clock_hz": {"cpu": 400000000, "hclk": 200000000, "fdcan": 80000000, "sdmmc": 100000000, "spi4": 12500000},
+      "cache": {"icache": true, "dcache": false},
+      "card": {"model": "FILL_ME", "identity_hash": "FILL_ME", "capacity_bytes": 0, "filesystem": "FAT32"},
+      "capacities": {"can_ingress": 512, "sd_record": 1024, "frame_ring": 512},
+      "can_bitrates": {"nominal": [500000, 500000], "data": [2000000, 2000000]},
+      "power": "FILL_WITH_SAME_SUPPLY_CONDITION",
+      "bench_config": {"segment_kib": 64, "rotate_ms": 1000, "refresh_ms": 100},
+      "busy_workload": {"kind": "physical-card", "conditioning": "FILL_WITH_REPEATED_CARD_CONDITIONING"}
+    }
+  },
+  "builds": {
+    "bare-metal": {"firmware": "FILL_ME", "elf_sha256": "FILL_ME", "toolchain": "FILL_ME", "compiler_flags": "FILL_ME"},
+    "freertos": {"firmware": "FILL_ME", "elf_sha256": "FILL_ME", "toolchain": "FILL_ME", "compiler_flags": "FILL_ME", "kernel_commit": "8a59a4b19bf72977819feddef87d41163ced7004"}
+  },
+  "pairs": [
+    {"order": ["bare-metal", "freertos"], "warmup_s": {"bare-metal": 10, "freertos": 10}, "window_s": {"bare-metal": 60, "freertos": 60}, "card_start_state_equal": false},
+    {"order": ["freertos", "bare-metal"], "warmup_s": {"bare-metal": 10, "freertos": 10}, "window_s": {"bare-metal": 60, "freertos": 60}, "card_start_state_equal": false},
+    {"order": ["bare-metal", "freertos"], "warmup_s": {"bare-metal": 10, "freertos": 10}, "window_s": {"bare-metal": 60, "freertos": 60}, "card_start_state_equal": false}
+  ]
+}

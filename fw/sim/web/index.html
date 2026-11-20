@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAN FD · Rev D 界面预览</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --ink: #1d2330; --muted: #6b7385; --line: #dde1e8;
+  --accent: #2f6fde; --ok: #1f9d55; --warn: #d97a00; --bad: #d23c3c;
+  --chip: #eef1f6; --chip-on: #2f6fde; --chip-on-ink: #fff;
+  --body: #2b2f36; --body-edge: #1a1d22; --key: #3b414b; --key-ink: #e9edf3;
+  --lcd-bg: #0f1520; --lcd-ink: #dfe7f2; --lcd-dim: #7f8ba0; --lcd-line: #263043;
+  --lcd-sel: #24467a; --lcd-ok: #38c172; --lcd-warn: #f2a33a; --lcd-bad: #ff6464; --lcd-tx: #6fb1ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171c; --panel: #1d2128; --ink: #e6e9ef; --muted: #98a1b3; --line: #2e343e;
+    --chip: #262b34; --chip-on: #4b86ef;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171c; --panel: #1d2128; --ink: #e6e9ef; --muted: #98a1b3; --line: #2e343e;
+  --chip: #262b34; --chip-on: #4b86ef;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+header .sp { flex: 1; }
+button, select { font: inherit; color: var(--ink); background: var(--chip); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.on { background: var(--chip-on); color: var(--chip-on-ink); border-color: var(--chip-on); }
+button.danger { color: var(--bad); }
+main { display: grid; grid-template-columns: minmax(540px, 600px) minmax(320px, 1fr); gap: 14px; padding: 14px 16px; }
+@media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+.panel h2 { font-size: 13px; margin: 0 0 8px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.panel h2 small { color: var(--muted); font-weight: 400; }
+.row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 5px 0; }
+.row > label { min-width: 74px; color: var(--muted); }
+.muted { color: var(--muted); }
+
+/* ---- 设备外观 ---- */
+.device { background: var(--body); border: 2px solid var(--body-edge); border-radius: 18px; padding: 14px 16px 16px;
+  width: 100%; max-width: 560px; margin: 0 auto; box-shadow: 0 6px 22px rgba(0,0,0,.18); }
+.devtop { display: flex; align-items: center; gap: 14px; color: #aab3c2; font-size: 11px; margin-bottom: 8px; }
+.led { width: 10px; height: 10px; border-radius: 50%; background: #444a54; display: inline-block; vertical-align: -1px; margin-right: 4px;
+  box-shadow: inset 0 0 2px rgba(0,0,0,.6); }
+.led.stat.on { background: #f4f7ff; box-shadow: 0 0 8px #dfe8ff; }
+.led.rec.on { background: #ff3b3b; box-shadow: 0 0 8px #ff4d4d; }
+.led.chg.on { background: #ff6a3d; }
+.screen-wrap { width: 100%; aspect-ratio: 3 / 2; position: relative; border-radius: 6px; overflow: hidden; background: #000;
+  border: 3px solid #0b0d10; }
+.screen { position: absolute; left: 0; top: 0; width: 480px; height: 320px; transform-origin: 0 0;
+  background: var(--lcd-bg); color: var(--lcd-ink); font-size: 13px; overflow: hidden; user-select: none; }
+.screen.dark { background: #000; }
+.sb { height: 22px; display: flex; align-items: center; gap: 8px; padding: 0 6px; font-size: 11px; background: #0a0f17;
+  border-bottom: 1px solid var(--lcd-line); white-space: nowrap; overflow: hidden; }
+.sb .chs { display: flex; gap: 8px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 3px; vertical-align: 0; }
+.tb { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border-bottom: 1px solid var(--lcd-line); }
+.tb .back { width: 26px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer; color: var(--lcd-dim); font-size: 18px; }
+.tb .back:hover { background: #1b2433; }
+.tb .t { font-weight: 600; font-size: 14px; }
+.tb .r { margin-left: auto; color: var(--lcd-dim); font-size: 11px; }
+.content { position: absolute; left: 0; right: 0; top: 52px; bottom: 0; overflow: hidden; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, 1fr); gap: 8px; padding: 12px; height: 100%; }
+.tile { background: #172133; border: 1px solid #22314a; border-radius: 8px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 6px; cursor: pointer; font-size: 13px; }
+.tile .ic { font-size: 24px; color: #8fb4ff; }
+.tile.sel { background: var(--lcd-sel); border-color: #5b8de0; }
+.list .it { height: 22px; display: flex; align-items: center; padding: 0 8px; gap: 8px; border-bottom: 1px solid #172031; cursor: pointer; }
+.list .it .l { flex: 0 0 auto; max-width: 52%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .it .v { margin-left: auto; color: var(--lcd-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-size: 12px; }
+.list .it.sel { background: var(--lcd-sel); }
+.list .it.sel .v { color: #c9d6ea; }
+.list .it.dis { opacity: .45; }
+.list .it.warn .v { color: var(--lcd-warn); }
+.list .it.act .l { color: var(--lcd-ok); }
+.list .it.action .l::before { content: "▸ "; color: #6f8fc0; }
+.scroll { position: absolute; right: 2px; top: 4px; bottom: 4px; width: 3px; background: #172031; border-radius: 2px; }
+.scroll i { position: absolute; left: 0; right: 0; background: #4a6a9e; border-radius: 2px; }
+.live .hd { height: 20px; display: flex; gap: 8px; align-items: center; padding: 0 6px; font-size: 11px; color: var(--lcd-dim);
+  border-bottom: 1px solid var(--lcd-line); white-space: nowrap; }
+.live table { width: 100%; border-collapse: collapse; font: 11px/18px ui-monospace, "SF Mono", Menlo, Consolas, monospace; table-layout: fixed; }
+.live th { color: var(--lcd-dim); font-weight: 400; text-align: left; padding: 0 3px; border-bottom: 1px solid var(--lcd-line); }
+.live td { padding: 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid #141c2a; cursor: pointer; }
+.live tr.sel td { background: var(--lcd-sel); }
+.live tr.err td { color: var(--lcd-bad); }
+.live tr.tx td { color: var(--lcd-tx); }
+.live tr.to td { color: #6b7385; }
+.live .chg { color: #ffd166; font-weight: 700; }
+.toast { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); max-width: 440px; background: rgba(28,36,52,.96);
+  border: 1px solid #3a4b6a; border-radius: 14px; padding: 5px 12px; font-size: 12px; text-align: center; }
+.dlg-mask { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; }
+.dlg { width: 380px; background: #1a2333; border: 1px solid #44587d; border-radius: 10px; padding: 12px 14px; }
+.dlg .tx { font-size: 13px; margin-bottom: 12px; }
+.dlg .bt { display: flex; gap: 10px; justify-content: flex-end; }
+.dlg .bt span { padding: 4px 12px; border-radius: 6px; border: 1px solid #44587d; cursor: pointer; font-size: 12px; }
+.dlg .bt span.ok { background: #2b5bb0; border-color: #2b5bb0; }
+.dlg .opt { padding: 3px 8px; border-radius: 4px; cursor: pointer; }
+.dlg .opt.sel { background: var(--lcd-sel); }
+.dlg .q { color: var(--lcd-dim); font-size: 11px; margin-top: 6px; }
+.center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--lcd-dim); text-align: center; padding: 20px; }
+.banner { position: absolute; left: 0; right: 0; top: 52px; background: #5a2a0e; color: #ffd9b0; text-align: center; font-size: 12px; padding: 3px; }
+
+.keys { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 14px; gap: 10px; }
+.cross { display: grid; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 40px); gap: 5px; justify-self: center; }
+.k { background: var(--key); color: var(--key-ink); border: 1px solid #555d6a; border-radius: 8px; display: flex; align-items: center;
+  justify-content: center; font-size: 13px; cursor: pointer; user-select: none; touch-action: none; box-shadow: 0 2px 0 #1b1e23; }
+.k:active, .k.down { transform: translateY(1px); box-shadow: none; background: #4b5361; }
+.k.ok { border-radius: 50%; }
+.k.rec { background:#3c4350;border-color:#6b7787; }.k.rec.recording{background:#a92e3d;border-color:#f17d87;color:#fff;box-shadow:0 0 9px #eb475e66}.k.rec.preparing,.k.rec.saving{background:#66502b;border-color:#bf9853;color:#ffdf9e}
+.k.pwr { background: #3a3f2c; border-color: #6b7146; }
+.side { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.side .k { width: 74px; height: 36px; }
+.hint { color: #9aa3b2; font-size: 11px; text-align: center; margin-top: 10px; }
+
+/* ---- 状态机面板 ---- */
+.sm { display: grid; grid-template-columns: 78px 1fr; gap: 6px 8px; align-items: start; }
+.sm .n { color: var(--muted); padding-top: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { padding: 1px 7px; border-radius: 10px; background: var(--chip); color: var(--muted); font-size: 12px; border: 1px solid transparent; }
+.chip.cur { background: var(--chip-on); color: var(--chip-on-ink); }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 3px 12px; margin-top: 8px; font-size: 12px; }
+.kv b { font-weight: 500; }
+.log { max-height: 260px; overflow: auto; font-size: 12px; }
+.log div { padding: 2px 0; border-bottom: 1px dashed var(--line); }
+.log span { color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.buscard { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
+.buscard h3 { margin: 0 0 4px; font-size: 12px; }
+.err { color: var(--bad); }
+.lcd-hint { position:absolute; bottom:0; left:0; right:0; height:24px; font-size:10px; line-height:12px; padding:2px 6px; color:var(--lcd-dim); background:#0a0f17; border-top:1px solid var(--lcd-line); }
+.digit-edit { background:#ffd575; color:#111; border-radius:2px; padding:1px; }
+.mode-badge { background: var(--chip); border-radius: 12px; padding: 2px 9px; font-size: 11px; color: var(--muted); }
+.worktabs { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:12px; }
+.worktabs button { padding:6px 12px; }
+.workform { display:grid; grid-template-columns:1fr 1fr; gap:9px 12px; }
+.workform label { display:grid; gap:4px; color:var(--muted); font-size:12px; }
+.workform .wide { grid-column:1/-1; }
+.workform input, .workform textarea, .workform select { width:100%; background:var(--bg); color:var(--ink); border:1px solid var(--line); padding:7px 8px; border-radius:6px; font:inherit; }
+.workform textarea { min-height:74px; resize:vertical; font-family:ui-monospace,monospace; }
+.workform input[type=checkbox] { width:auto; }
+.checkrow { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+.checkrow label { display:flex; align-items:center; gap:5px; }
+.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.worknote { color:var(--muted); font-size:12px; margin:8px 0; line-height:1.6; }
+.feedback { min-height:22px; margin-top:10px; font-size:12px; color:var(--ok); overflow-wrap:anywhere; }
+.feedback.bad { color:var(--bad); }
+.filelist { display:grid; gap:7px; max-height:270px; overflow:auto; margin-top:10px; }
+.filecard { border:1px solid var(--line); border-radius:7px; padding:9px; }
+.filecard strong { display:block; overflow-wrap:anywhere; }
+.filecard .meta { color:var(--muted); font-size:11px; margin:4px 0; }
+[hidden] { display:none !important; }
+
+/* Interface review: the product screen is primary; test equipment is secondary. */
+:root { --bg:#f3f5f8; --panel:#fff; --ink:#1d2939; --muted:#7a8494; --line:#e3e7ed; --accent:#3269df; --chip:#f5f7fa; --ok:#219c7d; --lcd-bg:#111b29; --lcd-ink:#edf2fa; --lcd-dim:#97a7be; --lcd-line:#29364a; --lcd-sel:#244b7c; }
+body { font-size:13px; letter-spacing:.1px; }
+button,select { min-height:30px; border-radius:7px; transition:border-color .15s,background .15s; }
+button:focus-visible,.k:focus-visible { outline:2px solid #638ff2; outline-offset:3px; }
+button:disabled { opacity:.5; cursor:not-allowed; }
+.app-header { min-height:70px; gap:10px; padding:12px 24px; box-shadow:0 1px 0 #fff; }
+.brand-mark { width:34px;height:34px;display:flex;align-items:center;justify-content:center; background:#234a79;color:white;border-radius:10px;font-weight:750;font-size:18px; }
+.brand-mark span { font-size:11px;margin-left:1px;color:#98c9ff; }
+.brand { display:grid;gap:2px;min-width:144px; }
+.app-header .brand h1 { font-size:15px;font-weight:650;letter-spacing:.3px; }
+.brand>span { color:#8a94a3;font-size:10px; }
+.connection { display:flex;align-items:center;gap:5px;font-size:11px;color:#728094; }
+.connection i { height:5px;width:5px;border-radius:50%;background:#2ab28e; }
+.mode-badge { border:1px solid #e4e9ee;background:#fafbfc;color:#8a94a2;font-size:10px;padding:3px 7px; }
+.clock-controls { display:flex;align-items:center;gap:4px; }.clock-controls>.muted { margin-right:5px;font-size:11px; }
+.clock-controls button { padding:4px 8px;font-size:11px; }.subtle { background:transparent;border-color:transparent;font-size:11px; }
+.review-layout { display:grid;grid-template-columns:158px minmax(0,1fr) 288px;gap:24px;max-width:1512px;margin:0 auto;padding:26px 26px 36px;align-items:start; }
+.nav-rail { position:sticky;top:96px; }.rail-label { font-size:10px;color:#9aa3af;letter-spacing:2px;margin:0 12px 12px; }
+#deviceNav { display:grid;gap:4px; }.nav-item { display:flex;align-items:center;gap:10px;text-align:left;min-height:52px;border:1px solid transparent;background:transparent;padding:8px 10px;color:#748094;width:100%; }
+.nav-item>span:last-child { display:grid;gap:3px; }.nav-item b { color:#536176;font-size:12px;font-weight:550; }.nav-item small { font-size:10px;color:#98a1ae; }.nav-item.active { background:#e7eefb;border-color:#dce6f9; }.nav-item.active b,.nav-item.active .nav-symbol { color:#3269df; }.nav-item.active small { color:#7392c9; }
+.nav-symbol { display:flex;color:#8291a8; }.nav-symbol svg { width:18px;height:18px; }.rail-note { margin:24px 10px 0;border-top:1px solid var(--line);padding-top:16px;font-size:10px;color:#7e8d9e;line-height:1.8; }.rail-note p { color:#9aa3af;margin:4px 0; }.review-dot { display:inline-block;width:5px;height:5px;border-radius:50%;background:#719bdc;margin-right:5px; }
+.preview-column { min-width:0; }.preview-heading { display:flex;justify-content:space-between;gap:12px;align-items:center;max-width:720px;margin:0 auto 18px; }.eyebrow,.section-kicker { font-size:9px;letter-spacing:1.7px;color:#99a4b3; }.preview-heading h2 { font-size:20px;font-weight:650;letter-spacing:.4px;margin:4px 0 0; }.preview-heading button { font-size:11px;padding:6px 12px; }
+.device { max-width:720px;background:#28323f;border:1px solid #202a36;border-radius:18px;padding:12px 17px 12px;box-shadow:0 12px 30px #1d2b3c16,0 2px 4px #172f4712; }.devtop { margin-bottom:9px;font-size:9px;color:#94a0ae;gap:14px; }.led { height:6px;width:6px; }.screen-wrap { border:2px solid #17202c;border-radius:5px; }
+.screen { font-size:13px; }.keys { margin-top:12px;gap:8px; }.cross { grid-template-columns:repeat(3,34px);grid-template-rows:repeat(3,26px);gap:4px; }.k { border-radius:5px;font-size:10px;background:#354252;border:1px solid #4e5c6d;box-shadow:0 1px 0 #182330; }.k.ok { font-size:10px; }.side { gap:6px; }.side .k { width:66px;height:28px; }.side .muted { font-size:9px !important;line-height:1.5; }.hint { margin-top:9px;font-size:9px;color:#99a4b4; }.preview-caption { max-width:720px;margin:12px auto 17px;display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#95a0ae; }.preview-caption>span:last-child { color:#6684ad; }
+.status-cards { display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;max-width:720px;margin:0 auto; }.status-card { border:1px solid #e0e6ed;background:#f9fbfd;border-radius:9px;padding:10px 11px;min-width:0; }.status-card .label { color:#99a4b4;font-size:9px;display:flex;gap:5px;align-items:center; }.status-card .value { margin-top:4px;color:#41556f;font-size:12px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }.status-card .detail { margin-top:3px;font-size:9px;color:#8f9bae; }.status-card .dot { width:5px;height:5px;margin:0; }
+.review-feedback { max-width:720px;margin:8px auto;min-height:18px;color:#54749a;font-size:11px; }.review-feedback.bad { color:#bf4c43; }
+.review-sidebar { min-width:0; }.side-tabs { display:flex;gap:0;border-bottom:1px solid var(--line);margin-bottom:16px; }.side-tabs button { flex:1;background:transparent;border:0;border-radius:0;padding:8px 0 10px;font-size:11px;color:#93a0b0;border-bottom:2px solid transparent; }.side-tabs button.on { color:#3269df;border-bottom-color:#3269df;background:transparent; }
+.panel { border:1px solid #e2e7ee;border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 2px 4px #18273b02; }.panel h2 { font-size:13px;color:#42556f;margin:5px 0 12px; }.panel h2 small { font-size:10px; }.guide-sub { color:#8894a5;line-height:1.85;font-size:11px;margin:8px 0 16px; }.guide-actions { display:grid;gap:7px; }.guide-actions button { text-align:left;background:#f7f9fc;color:#4e688b;border-color:#e6ebf3;padding:8px 10px;font-size:11px; }.guide-actions button.primary { background:#3269df;color:white;border-color:#3269df; }.guide-note { font-size:10px;line-height:1.8;color:#a2aab5;margin:14px 0 0; }.key-guide { margin-top:14px;padding-top:12px;border-top:1px solid #edf0f5;display:grid;gap:6px; }.key-guide div { display:flex;justify-content:space-between;color:#8b98a8;font-size:10px; }.key-guide kbd { font-family:inherit;color:#5d7190; }.review-items ol { padding-left:16px;color:#8593a6;font-size:11px;line-height:2.2; }.review-items .worknote { font-size:10px; }
+.workbench { max-width:720px;margin:16px auto 0;padding:0;overflow:hidden; }.workbench>summary { padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;color:#5b6e87;font-size:12px;list-style:none; }.workbench>summary::after { content:'＋';color:#91a0b4;margin-left:8px; }.workbench[open]>summary::after { content:'−'; }.workbench>summary small { font-size:10px;color:#a0aab6;margin-left:auto; }.workbench-body { padding:0 16px 16px; }.worktabs { margin:10px 0 14px; }.worktabs button { font-size:11px; }.workform { gap:12px; }.workform label { font-size:11px; }.workform textarea { min-height:84px;line-height:1.65;font-size:12px; }.worknote { font-size:10px; }.tx-byte-tools { display:flex;gap:6px;align-items:center;font-size:10px;color:#94a1b0; }.tx-byte-tools span { margin-right:auto; }.tx-byte-tools button { font-size:10px;min-height:25px;padding:2px 7px; }.frame-preview { font:11px/1.6 ui-monospace,monospace;color:#6f839f;background:#f5f8fc;border-radius:5px;padding:8px; }.feedback { font-size:11px; }.workform .row button { font-size:11px; }
+.review-sidebar .row { gap:5px; }.review-sidebar .row>label { min-width:100%;font-size:10px;color:#8e9eb0; }.review-sidebar button,.review-sidebar select { font-size:10px;padding:4px 7px; }.review-sidebar input[type=range] { width:130px !important; }.buscard { padding:10px;background:#fafbfd; }.buscard h3 { display:grid;gap:3px;font-size:11px; }.buscard h3 .muted { font-size:9px;line-height:1.6; }.sm { grid-template-columns:44px 1fr;font-size:10px;gap:9px 6px; }.chip { font-size:9px;padding:1px 5px; }.kv { grid-template-columns:1fr;font-size:10px;gap:8px;margin-top:18px; }.log { font-size:10px;max-height:220px; }
+/* Device screen: 32px status + 30px page title + 234px content + 24px hints. */
+.sb { height:32px;display:block;padding:3px 7px;background:#0d1622;font-size:9px; }.sb-channels { display:flex;gap:12px;height:13px; }.sb-channel { display:flex;align-items:center;gap:4px;white-space:nowrap;min-width:0; }.sb-channel b { color:#d8e4f7;font-weight:600; }.sb-channel small { font-size:9px;color:#8194b0; }.sb-footer { display:flex;align-items:center;gap:9px;height:13px;color:#7f93ae;font-size:8px; }.sb-footer .right { margin-left:auto;display:flex;gap:8px; }.sb .dot { width:5px;height:5px;margin:0; }.sb-footer .rec-active { color:#fb8985; }.sb-footer .tx-active { color:#7eaefa; }.tb { height:30px;padding:0 8px;gap:5px; }.tb .t { font-size:13px;font-weight:600; }.tb .r { font-size:9px;color:#8397b5; }.tb .back { width:22px;height:24px;font-size:19px; }.content { top:62px;bottom:24px; }.tiles { gap:7px;padding:12px; }.tile { border-radius:7px;gap:6px;background:#172536;border-color:#29394f;font-size:12px; }.tile .ic { display:flex;color:#88b2ee; }.tile .ic svg { width:23px;height:23px; }.tile small { color:#7a8fae;font-size:8px; }.tile.sel { background:#244468;border-color:#597da6; }.tile:hover { background:#20364f; }
+.list .it { height:32px;padding:0 10px;font-size:12px; }.list .it .l { max-width:47%; }.list .it .v { font-size:11px;color:#a4b1c5; }.lcd-hint { height:24px;display:flex;align-items:center;line-height:1.4;font-size:8px;padding:3px 8px; }.lcd-hint .hint-accent { color:#9ebae6; }.live-controls { height:31px;display:flex;gap:4px;align-items:center;padding:3px 6px;border-bottom:1px solid var(--lcd-line); }.live-controls button { height:23px;min-height:23px;font-family:inherit;font-size:10px;line-height:1;border:1px solid #33445e;border-radius:4px;padding:2px 8px;background:#18273b;color:#94a9c6; }.live-controls button.active { color:#dbe8fb;background:#2a4f7a;border-color:#3f6593; }.live-controls .spacer { margin-left:auto; }.live-controls button.freeze { color:#e9be70; }.live-context { height:20px;display:flex;align-items:center;padding:0 7px;gap:7px;color:#8196b5;font-size:8px;background:#0f1c2b; }.live-context .state-pill { color:#68cbb4; }.live-context .state-pill.paused { color:#e8bd72; }.live-context .filter-text { overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:300px; }.live table { font:11px/22px ui-monospace,"SF Mono",Menlo,Consolas,monospace; }.live th { font-size:8px;line-height:17px;color:#7087a8; }.live td { line-height:22px;font-size:10px; }.live td[data-col=id] { color:#cbdcf5;font-weight:600; }.live .channel-num { display:inline-block;padding:0 3px;line-height:15px;background:#1e3e58;color:#8fbcd4;border-radius:3px;font-size:9px; }.live .channel-num.ch2 { background:#353055;color:#bab1e2; }.live .frame-kind { color:#83a9cb;font-size:8px; }.live .chg { color:#e8c77b;background:#8b6f3028;border-radius:2px; }.live-empty { height:160px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;font-size:11px;color:#7188a6; }.live-empty strong { font-weight:500;color:#9eb4d0; }.live-empty small { font-size:9px; }
+.frame-detail { padding:8px 12px; }.detail-head { display:flex;align-items:center;gap:8px; }.detail-id { font:650 20px/1.2 ui-monospace,monospace;color:#edf4ff;letter-spacing:1px; }.detail-tag { font-size:8px;padding:3px 5px;border-radius:3px;border:1px solid #354963;color:#9db8db; }.detail-tag.tx { color:#98befe;border-color:#385b92; }.detail-meta { display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px 12px;font-size:8px;color:#7890ae;margin:5px 0; }.detail-meta>span:nth-child(n+4){display:none;}.detail-meta b { display:block;color:#b7c8df;font-weight:400;font:10px/1.5 ui-monospace,monospace; }.payload-title { display:flex;align-items:center;color:#7189a9;font-size:8px;letter-spacing:.4px;margin:6px 0 3px; }.payload-title span:last-child { margin-left:auto; }.byte-grid { display:grid;gap:1px; }.byte-row { display:grid;grid-template-columns:25px repeat(8,1fr);font:11px/13px ui-monospace,monospace;gap:5px;color:#d0dcef; }.byte-row .offset { color:#526b8d;font-size:8px; }.byte-row span:not(.offset) { text-align:center;border-radius:2px;background:#17283b; }.detail-note { color:#859ab7;font-size:8px;line-height:1.5;margin:6px 0; }.detail-sub { display:flex;gap:5px;margin-left:auto; }.detail-sub button { border:1px solid #354963;color:#aec5e7;background:#1c3049;font-size:8px;min-height:20px;padding:2px 5px;border-radius:3px; }
+.toast { bottom:26px;border-radius:6px;background:#273b52f5;font-size:10px;max-width:440px;padding:6px 12px; }.dlg { width:384px;border-radius:9px;background:#1b2b40;border-color:#47617f; }.dlg .tx { font-size:13px;line-height:1.7; }.dlg .opt { padding:7px 8px;min-height:29px;font-size:12px; }.dlg .bt span { padding:7px 12px;font-size:11px; }.dlg .q { font-size:9px; }.center { color:#9caec7; }.screen.dark .center { color:#536b8b !important; }.empty-mark { font-size:28px;color:#34506e;margin-bottom:6px; }.screen.dark .center strong { color:#8da8c8;font-size:15px;font-weight:500; }.screen.dark .center span { font-size:10px;line-height:1.8; }
+@media (max-width:1250px) { .review-layout { grid-template-columns:146px minmax(0,1fr);gap:20px;padding:22px 20px; }.review-sidebar { grid-column:2; }.review-sidebar [data-side-pane="guide"] { display:grid;grid-template-columns:1fr 1fr;gap:14px; }.side-tabs { max-width:420px; }.app-header .mode-badge { display:none; }.nav-item { padding:8px;gap:8px; }.preview-heading { margin-bottom:16px; } }
+@media (max-width:950px) { .app-header { padding:10px 16px;gap:8px;min-height:65px; }.connection { display:none; }.brand { min-width:125px; }.brand-mark { width:30px;height:30px; }.clock-controls>.muted { display:none; }.app-header .brand h1 { font-size:14px; }.clock-controls button { font-size:10px;padding:3px 7px; }.review-layout { gap:16px;padding:20px 16px;grid-template-columns:134px minmax(0,1fr); }.nav-item b { font-size:11px; }.nav-item small { font-size:9px; }.nav-item { min-height:49px; }.preview-heading h2 { font-size:18px; }.review-sidebar [data-side-pane="guide"] { display:block; }.status-cards { gap:7px; }.status-card { padding:9px; } }
+@media (max-width:660px) { .app-header { position:static;flex-wrap:wrap; }.app-header .sp { display:none; }.clock-controls { margin-left:auto; }.app-header #reset { display:none; }.brand-mark { display:none; }.brand { margin-right:auto; }.review-layout { display:block;padding:14px 12px; }.nav-rail { position:static;margin-bottom:16px; }.rail-label,.rail-note { display:none; }#deviceNav { display:flex;overflow-x:auto;gap:5px;padding-bottom:5px; }.nav-item { width:auto;min-height:32px;flex:0 0 auto;padding:6px 9px;border-color:#e5e9f0;background:#fff;gap:5px; }.nav-item small { display:none; }.nav-symbol svg { width:14px;height:14px; }.preview-heading h2 { font-size:17px; }.eyebrow { font-size:8px; }.preview-heading button { font-size:10px;padding:5px 9px; }.device { padding:10px 10px;border-radius:13px; }.preview-caption { font-size:8px; }.status-cards .detail { font-size:8px; }.status-card .value { font-size:10px; }.review-sidebar { margin-top:20px; }.workform { grid-template-columns:1fr; }.workform .wide { grid-column:auto; }.workbench>summary small { display:none; }.hint { font-size:8px; }.app-header #step { display:none; } }
+
+.device.offline .screen::after { content:"连接已断开 · 画面为最后快照";position:absolute;inset:0;background:#07101fce;color:#bfd0e5;display:flex;align-items:center;justify-content:center;font-size:13px;z-index:100; }
+.tx-byte-tools .bad { color:var(--bad); }.guide-detail { margin:12px 0;padding:10px;background:#f6f8fc;border-radius:6px;font-size:10px;color:#7d8fa5;display:grid;gap:7px; }.guide-detail div{display:flex;justify-content:space-between;gap:8px;}.guide-detail b{font-weight:500;color:#466080;font-family:ui-monospace,monospace;}.guide-detail details div{font:10px/1.7 ui-monospace,monospace;display:block;overflow-wrap:anywhere;margin-top:7px;color:#55708d;}
+
+/* Review controls: same data, explicit channel/session ownership. */
+.tx-page{padding:6px 7px}.tx-page button,.rec-page button{font-size:10px;padding:4px 7px;background:#1c2a3b;color:#dfe9f8;border-color:#32475f}.tx-page button.on{background:#345789}.tx-top{display:flex;align-items:center;gap:5px;height:30px}.tx-top .spacer{flex:1}.tx-top button.danger,.rec-actions .danger{color:#ffb2b2;border-color:#9a4848;background:#51272b}.tx-row{display:grid;grid-template-columns:22px 100px 1fr 45px 42px;gap:5px;align-items:center;height:31px;border-bottom:1px solid #283448;font-size:10px}.tx-row.sel{background:#263e5c}.tx-row .tx-id{font:600 12px ui-monospace,monospace}.tx-row small{color:#91a2b8;font-size:9px}.tx-foot{display:flex;align-items:center;gap:5px;height:30px}.tx-foot span{flex:1;color:#91a2b8;font-size:9px}.tx-status{font-size:10px;color:#a7b8d0;height:20px;padding-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.rec-page{padding:9px 12px}.rec-state{display:flex;justify-content:space-between;font-size:16px;font-weight:650;color:#d9e8ff}.rec-state .running{color:#ff8e8e}.rec-file{font-size:10px;color:#a6b7ce;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:4px 0 8px}.rec-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.rec-metrics div{border:1px solid #29374c;border-radius:5px;padding:5px 8px;color:#8e9fb6;font-size:9px}.rec-metrics b{display:block;color:#e3ecf9;font:600 14px ui-monospace,monospace}.rec-actions{display:flex;gap:6px;margin:10px 0}.rec-actions button{font-size:12px;padding:6px 12px}.rec-config{display:flex;gap:5px;font-size:9px;color:#92a6bf}.rec-config button{font-size:9px;padding:2px 5px}.table-scroll{overflow-x:auto}.sequence-table{border-collapse:collapse;width:100%;font-size:12px}.sequence-table th{text-align:left;color:var(--muted);font-weight:500}.sequence-table th,.sequence-table td{padding:8px 5px;border-bottom:1px solid var(--line)}.sequence-table input[type=number]{width:100%;min-width:70px}.sequence-table td:first-child{min-width:140px}.sequence-table small{display:block;color:var(--muted);font-size:10px}.timing-explainer{border-left:3px solid #86a8df;padding:8px 12px;background:#f2f6fc;color:#435b7a;font-size:12px}.sequence-running{margin-top:12px;color:var(--muted)}.database-results{max-height:480px;overflow:auto;margin:12px 0;border:1px solid var(--line);border-radius:8px}.database-frame{padding:10px 12px;border-bottom:1px solid var(--line)}.database-frame:last-child{border-bottom:0}.database-frame-head{display:flex;gap:9px;align-items:center}.database-frame-head strong{flex:1}.database-frame .meta{color:var(--muted);font-size:11px;margin:4px 0 0 24px}.database-frame details{margin-left:24px;font-size:11px;color:var(--muted)}.database-frame summary{cursor:pointer}.database-frame .signal{padding:3px 0}.rename-form{display:flex;gap:6px;margin-top:7px;align-items:center}.rename-form input{flex:1;min-width:80px}.worktabs{flex-wrap:wrap;row-gap:6px}.workform label{min-width:0}
+.tx-row .tx-id small{display:block;white-space:nowrap;line-height:1.25;font-weight:400}.tx-row .tx-id{line-height:1.15}.tx-row>div:nth-child(3){line-height:1.3}
+
+#workbench [data-tab="tx"],#workbench [data-tab="sequence"],#workbench [data-tab="record"],#workbench [data-tab="filter"],#workbench [data-pane="tx"],#workbench [data-pane="sequence"],#workbench [data-pane="record"],#workbench [data-pane="filter"],#databasePreview{display:none!important}
+.local-keyboard{padding:5px 8px;height:100%}.local-name-value{height:28px;display:flex;align-items:center;border:1px solid #465a76;background:#0a121e;border-radius:4px;padding:0 7px;font:13px ui-monospace,monospace;white-space:nowrap;overflow:hidden;color:#e7f2ff}.local-key-meta{display:flex;justify-content:space-between;height:18px;align-items:center;font-size:8px;color:#9eb2cf}.local-key-grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));grid-auto-rows:19px;gap:3px}.local-key-grid button{padding:0;font-size:10px;background:#202e42;border:1px solid #344961;color:#e5edf9;border-radius:3px}.local-key-grid button.sel{background:#365f9b;border-color:#a8cbff;box-shadow:inset 0 0 0 1px #a8cbff}.local-key-grid button.save{background:#245047;color:#caffeb}.local-key-grid button.cancel{background:#57303a;color:#ffd5df}.tx-foot button.sel{outline:1px solid #aacdff;background:#355d90}.tx-foot .stop-all{font-size:8px;color:#e3a9ac;padding:4px}.tx-foot span{font-size:8px}
+.rec-actions button.sel,.rec-config button.sel,.rec-metrics div.sel{outline:1px solid #b4d4ff;background:#315683}
+.lcd-hint.local-error{color:#ffb7bc;background:#351c27}
+
+.tiles{grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr)}
+.live{position:relative;height:100%;padding-bottom:24px}.live .live-empty{height:115px}
+.live-record{position:absolute;left:0;right:0;bottom:0;height:24px;padding:3px 6px;background:#182436;border-top:1px solid #34485f}
+.live-record-state{display:flex;gap:7px;align-items:center;height:17px;font-size:8px;color:#8fa5bf;white-space:nowrap;overflow:hidden}.live-record-state b{font-size:10px;color:#b7ccdf}.live-record-state b.running{color:#ff9a9d}.live-record-state b.pending{color:#eac37f}.live-record-state .file{margin-left:auto;overflow:hidden;text-overflow:ellipsis;max-width:185px}
+.live-record-actions{display:flex;gap:5px;height:23px}.live-record button{padding:2px 8px;min-height:21px;font-size:9px;color:#c4d6eb;background:#24394e;border:1px solid #45607d;border-radius:4px}.live-record button.danger{color:#ffc1c5;border-color:#a2525a;background:#522d38}.live-record button.settings{margin-left:auto}.live-record button:disabled{opacity:.45}
+.tx-top{height:27px}.tx-scope{display:flex;align-items:center;gap:4px;height:27px;font-size:9px;color:#91a5bd}.tx-scope button{font-size:9px;padding:3px 8px}.tx-scope .spacer{flex:1}.tx-top button{font-size:9px}.tx-row{height:30px}.tx-status{height:16px;font-size:9px}.tx-foot{height:27px}.tx-foot span{display:none}
+.tx-top .load-plan{background:#25584f;border-color:#68a698;color:#defff5;font-size:10px;padding:4px 12px;font-weight:650}.tx-top .load-plan.sel{outline:1px solid #b4e5d8}.tx-row{height:31px}.tx-content{min-width:0}.tx-bytes{font:10px ui-monospace,monospace;color:#d2e2f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tx-content small{display:block;font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.local-key-grid{grid-template-columns:repeat(var(--keyboard-columns,10),minmax(0,1fr));grid-auto-rows:var(--keyboard-key-height,19px)}.keyboard-placeholder{color:#7c91ad}.typed-keyboard .local-name-value{height:36px;font-size:18px;user-select:text}.typed-keyboard.payload-keyboard .local-name-value{height:64px;display:block;padding:5px 7px;font-size:11px;line-height:16px;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto}.typed-keyboard .local-key-grid button{font-size:14px;touch-action:manipulation}.typed-keyboard .local-key-grid button.clear{background:#423b28;color:#ffe2a2;border-color:#726344}.typed-keyboard .local-key-grid button.save{background:#24594b;border-color:#609d87}.typed-keyboard .local-key-grid button.cancel{background:#4c3039}.keyboard-help{height:14px;line-height:14px;color:#8fa7c4;font-size:8px;white-space:nowrap}.typed-keyboard .local-key-meta{font-size:9px}
+.live table{touch-action:none;user-select:none;cursor:grab}
+.typed-keyboard .local-key-grid [data-backspace="1"]{touch-action:none;user-select:none}
+.tx-editor{position:relative;height:100%}.tx-editor-toolbar{height:32px;display:flex;align-items:center;gap:6px;padding:3px 7px;background:#132337;border-bottom:1px solid #34485f}.tx-editor-toolbar button{height:25px;padding:2px 8px;font-size:10px;color:#d7e9fa;background:#27445f;border-color:#50718e;border-radius:4px}.tx-editor-toolbar button.save{background:#24594b;border-color:#609d87;color:#d8fff0}.tx-editor-toolbar button.cancel{background:#49313b;border-color:#79505f}.tx-editor-toolbar button.sel{outline:1px solid #b4d4ff}.tx-editor-toolbar button:disabled{opacity:.4}.tx-editor-toolbar span{flex:1;color:#8198b4;font-size:8px;white-space:nowrap}.tx-editor .list .it{height:28px;font-size:11px}.tx-editor .list .it .v{font-size:10px}.tx-editor>.scroll{top:32px}
+.tx-page.tx-unified{display:flex;flex-direction:column;height:100%;padding:4px 7px}.tx-target-bar{display:flex;align-items:center;gap:5px;height:32px;flex-shrink:0}.tx-target-bar button{height:27px;padding:2px 7px;font-size:10px;white-space:nowrap}.tx-target-bar button.tx-channel-toggle{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:5px;background:#223044;border-color:#43566f;color:#a7b8ce}.tx-channel-toggle i{display:block;width:7px;height:7px;border-radius:50%;background:#536479;flex-shrink:0}.tx-target-bar .tx-channel-toggle.running{background:#205748;border-color:#67b094;color:#ddfff1}.tx-channel-toggle.running i{background:#8bf0be;box-shadow:0 0 6px #8bf0be80}.tx-target-bar .tx-channel-toggle.pending{background:#5a482b;border-color:#b08d51;color:#ffe0a2;opacity:1}.tx-channel-toggle.pending i{background:#e9bd67}.tx-target-bar .load-plan{width:77px;color:#defff5;background:#25584f;border-color:#68a698;font-size:10px}.tx-target-bar button.sel,.tx-unified-footer button.sel{outline:1px solid #b4d4ff}.tx-unified button:disabled{opacity:.4}.tx-message-list{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;overscroll-behavior:contain;user-select:none;scrollbar-width:thin;scrollbar-color:#49698e #122031}.tx-message-list::-webkit-scrollbar{width:4px}.tx-message-list::-webkit-scrollbar-thumb{background:#49698e;border-radius:3px}.tx-channel-heading{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:5px;height:26px;padding:0 6px;background:#233a54;color:#bedcff;font-size:10px;font-weight:650}.tx-channel-heading b{font-size:10px}.tx-channel-heading .tx-channel-state{margin-right:auto;color:#8faac7;font-size:8px;font-weight:400;white-space:nowrap}.tx-channel-heading .tx-channel-state.running{color:#88ddbb}.tx-channel-heading .tx-channel-state.pending{color:#efc885}.tx-channel-heading button{height:19px;padding:1px 5px;font-size:8px;line-height:15px;white-space:nowrap}.tx-channel-group[data-channel="1"] .tx-channel-heading{background:#363352;color:#d3c9ff}.tx-message-row{height:47px;padding:6px;border-bottom:1px solid #2a3b50}.tx-message-row.sel{background:#233d58}.tx-message-main{display:flex;gap:6px;align-items:center;height:18px;min-width:0}.tx-message-main .spacer{flex:1}.tx-slot{color:#8299b6;font-size:9px;min-width:10px}.tx-message-id{font:650 13px/18px ui-monospace,monospace;color:#d9ebff;white-space:nowrap}.tx-message-format{color:#8ba6c4;font-size:8px;white-space:nowrap}.tx-message-main button{height:18px;padding:0 7px;font-size:9px;line-height:14px}.tx-message-values{display:flex;align-items:center;gap:6px;height:16px;min-width:0}.tx-message-values code{flex:1;min-width:0;color:#c4d9f1;font:11px/16px ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tx-message-values button.tx-row-timing{max-width:55%;height:16px;padding:0 2px;border:0;background:transparent;color:#8faac8;font-size:8px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tx-unified-footer{height:26px;display:flex;align-items:center;gap:5px;flex-shrink:0}.tx-unified-footer button{height:24px;padding:1px 12px;font-size:10px;white-space:nowrap}.tx-loaded-source{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#8da5c3;font-size:8px}.rec-key-note{font-size:10px;color:#a2b8d2;line-height:1.5;margin:7px 0}.rec-actions{margin:7px 0}.rec-state small{font-size:9px;font-weight:400}.rec-metrics b{font-size:12px}#recordMark{display:none!important}
+.tx-page.tx-unified button{min-height:0}
+.live-controls .channel-tab{font-weight:650;color:#a9bdd5;padding:2px 8px}.live-controls .channel-tab.active{background:#285381;border-color:#78ade6;color:#fff}.live-controls .channel-tab[data-ui-channel="2"].active{background:#4d427b;border-color:#b1a0df}.view-separator{height:16px;border-left:1px solid #3b4b60;margin:0 1px}
+.direction-badge{display:inline-block;font-size:8px;font-weight:650;line-height:15px;padding:0 3px;border-radius:3px;white-space:nowrap}.rx-badge{background:#14354a;color:#91cef0;border:1px solid #305872}.tx-badge{background:#4b381d;color:#ffd88e;border:1px solid #846338}.live tr.tx td[data-col=id]{color:#ffdc93}.local-key-grid [data-backspace="1"]{touch-action:none;user-select:none}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="brand-mark">C<span>↔</span></div><div class="brand"><h1>CAN FD 监控器</h1><span>Rev D · 界面评审</span></div>
+  <span class="connection"><i id="connDot"></i><span id="conn">连接中…</span></span>
+  <span class="mode-badge">本地模拟 · 未连接实物</span><span class="sp"></span>
+  <div class="clock-controls"><span class="muted">模拟时间</span><button data-speed="1" class="on">×1</button><button data-speed="5">×5</button><button data-speed="20">×20</button><button id="pause">暂停模拟</button><button id="step" title="暂停模拟后推进 10 毫秒">单步</button></div>
+  <button id="reset" class="danger subtle">重置模拟</button>
+</header>
+<main class="review-layout">
+  <aside class="nav-rail"><div class="rail-label">设备菜单</div><nav id="deviceNav" aria-label="设备页面导航"><button type="button" class="nav-item" data-page="home"><span class="nav-symbol" data-icon="home"></span><span><b>概览</b><small>主页</small></span></button><button type="button" class="nav-item" data-page="live"><span class="nav-symbol" data-icon="live"></span><span><b>实时显示</b><small>报文查看与录制</small></span></button><button type="button" class="nav-item" data-page="send"><span class="nav-symbol" data-icon="tx"></span><span><b>发送报文</b><small>报文列表 / 加载文件</small></span></button><button type="button" class="nav-item" data-page="diag"><span class="nav-symbol" data-icon="diag"></span><span><b>总线诊断</b><small>负载与错误</small></span></button><button type="button" class="nav-item" data-page="files"><span class="nav-symbol" data-icon="files"></span><span><b>文件管理</b><small>卡内文件列表</small></span></button><button type="button" class="nav-item" data-page="chset"><span class="nav-symbol" data-icon="chset"></span><span><b>通道设置</b><small>模式与位速率</small></span></button><button type="button" class="nav-item" data-page="sysset"><span class="nav-symbol" data-icon="sysset"></span><span><b>系统设置</b><small>屏幕与设备</small></span></button></nav><div class="rail-note"><span class="review-dot"></span>界面确认阶段<p>先确认信息和操作流程，再继续底层优化。</p></div></aside>
+  <section class="preview-column">
+    <div class="preview-heading"><div><span class="eyebrow">DEVICE PREVIEW</span><h2 id="previewTitle">设备概览</h2></div><button type="button" id="bootPreview" class="primary">启动设备预览</button></div>
+    <div class="device">
+      <div class="devtop">
+        <span><i class="led stat" id="ledStat"></i>STAT</span>
+        <span><i class="led rec" id="ledRec"></i>REC</span>
+        <span><i class="led chg" id="ledChg"></i>CHG</span>
+        <span style="margin-left:auto" id="devInfo"></span>
+      </div>
+      <div class="screen-wrap" id="wrap"><div class="screen" id="scr"></div></div>
+      <div class="keys">
+        <div class="side">
+          <div class="k" data-k="5" role="button" tabindex="0" aria-label="BACK 返回">BACK</div>
+          <div class="k rec" data-k="6" role="button" tabindex="0" aria-label="REC 已停止，短按开始" aria-pressed="false" title="短按开始，再短按停止后命名">REC</div>
+        </div>
+        <div class="cross">
+          <span></span><div class="k" data-k="0" role="button" tabindex="0" aria-label="设备方向键 上">▲</div><span></span>
+          <div class="k" data-k="2" role="button" tabindex="0" aria-label="左">◀</div><div class="k ok" data-k="4" role="button" tabindex="0" aria-label="OK 确定">OK</div><div class="k" data-k="3" role="button" tabindex="0" aria-label="右">▶</div>
+          <span></span><div class="k" data-k="1" role="button" tabindex="0" aria-label="下">▼</div><span></span>
+        </div>
+        <div class="side">
+          <div class="k pwr" data-k="7" role="button" tabindex="0" aria-label="POWER 电源">POWER</div>
+          <div class="muted" style="font-size:11px;color:#9aa3b2">按住 1 s 开机<br>长按 2 s 关机</div>
+        </div>
+      </div>
+      <div class="hint">键盘：方向键 · Enter=OK · Esc=BACK · R=REC（短按启停录制） · P=POWER；屏幕可直接点</div>
+    </div>
+    <div class="preview-caption"><span>480 × 320 设备屏幕 · 支持触摸与方向键</span><span id="reviewState">等待启动</span></div>
+    <div class="status-cards" id="quickStatus"></div>
+    <div class="review-feedback" id="reviewFeedback" role="status" aria-live="polite"></div>
+    <details class="panel workbench" id="workbench"><summary><span>模拟 SD 卡与样例导出</span><small>放入方案 / 数据库 / 日志</small></summary><div class="workbench-body">
+      <p class="worknote">这里模拟向 SD 卡复制发送方案、数据库或日志，以及把样例下载到电脑。发送参数、选帧和命名均在上方设备屏幕中操作。</p>
+      <nav class="worktabs" aria-label="工作台功能">
+        <button type="button" data-tab="tx" class="on">报文编辑</button>
+        <button type="button" data-tab="sequence">循环时序</button><button type="button" data-tab="database">向 SD 放入数据库</button><button type="button" data-tab="filter">显示筛选</button>
+        <button type="button" data-tab="plans">发送方案文件</button><button type="button" data-tab="record">录制与命名</button><button type="button" data-tab="files">日志与样例导出</button>
+      </nav>
+      <div data-pane="tx" hidden>
+        <form id="txForm" class="workform">
+          <label>发送通道<select id="txCh"><option value="0">CAN1</option><option value="1">CAN2</option></select></label>
+          <label>列表条目<select id="txEntry"><option value="0">第 1 条</option><option value="1">第 2 条</option><option value="2">第 3 条</option><option value="3">第 4 条</option></select></label>
+          <label>报文 ID（十六进制）<input id="txId" value="123" maxlength="8" spellcheck="false" required></label>
+          <label>帧格式<select id="txFormat"><option value="0">标准帧 · 11 位</option><option value="1">扩展帧 · 29 位</option></select></label>
+          <div class="wide checkrow"><label><input type="checkbox" id="txFd">CAN FD</label><label><input type="checkbox" id="txBrs">BRS 加速</label><label><input type="checkbox" id="txRtr">RTR 远程帧</label></div>
+          <label>数据长度<select id="txLen"></select></label>
+          <label>独立周期（ms，0 禁用）<input id="txPeriod" type="number" min="0" max="65535" value="100" required></label>
+          <label class="wide">数据（十六进制字节，以空格分隔）<textarea id="txData" spellcheck="false">11 22 33 44 55 66 00 00</textarea></label>
+          <div class="wide tx-byte-tools"><span id="txByteHint"></span><button type="button" id="txFillZero">填充 00</button><button type="button" id="txFillIncrement">递增示例</button></div><div id="txPreview" class="wide frame-preview"></div><div class="wide row"><button class="primary" id="txSave" type="submit">保存到发送列表</button><button id="txReload" type="button">读取当前条目</button><button id="txDevice" type="button">在屏幕上编辑</button></div>
+        </form>
+        <p class="worknote">设备上：短按 OK 单发，→ 切换周期发送，长按 OK 编辑。编辑只修改草稿；保存自定义数据后，该条原有动态计数与校验将清除。</p>
+      </div>
+      <div data-pane="sequence" hidden>
+        <div class="section-kicker">GROUPED CYCLIC SEND</div><h2>按 ID 分组循环 <small>两路独立运行，按列表顺序循环</small></h2>
+        <form id="sequenceForm" class="workform">
+          <label>循环发送通道<select id="sequenceCh"><option value="0">CAN1</option><option value="1">CAN2</option></select></label>
+          <label>不同 ID 间隔（ms）<input id="sequenceIdGap" type="number" min="0" max="3600000" value="10" required></label>
+          <div class="wide table-scroll"><table class="sequence-table"><thead><tr><th>启用 / 发送槽</th><th>每轮次数</th><th>同 ID 间隔 ms</th><th>单 ID 总周期 ms</th></tr></thead><tbody id="sequenceRows"></tbody></table></div>
+          <div class="wide timing-explainer" id="sequenceExplanation"></div>
+          <div class="wide row"><button type="submit" class="primary">保存本路循环设置</button><button type="button" id="sequenceReload">读取当前设置</button><button type="button" id="sequenceDefaults">本路时间恢复默认</button><button type="button" id="sequenceDefaultsAll">一键设置两路所有默认时间</button></div>
+        </form>
+        <div class="sequence-running" id="sequenceStatus"></div><div class="row"><button id="sequenceStart" class="primary" type="button">开始本路循环</button><button id="sequenceStop" class="danger" type="button">停止本路发送</button></div>
+        <p class="worknote">每个 ID 按间隔发送指定次数；从首帧起等待到“单 ID 总周期”后，切换到下一组。只有 ID 或标准/扩展格式不同时叠加“不同 ID 间隔”。列表末尾返回第一组持续循环，直到停止。默认时间为周期 100 ms、同 ID 间隔 10 ms、不同 ID 间隔 10 ms；次数较多时总周期自动加长到合法值。恢复默认只修改时间，不修改 ID、数据、次数和启用选择。</p>
+      </div>
+      <div data-pane="database">
+        <div class="section-kicker">MESSAGE DATABASE</div><h2>向模拟 SD 卡放入数据库 <small>设备在屏幕内选帧和加入发送槽</small></h2>
+        <form id="databaseForm" class="workform">
+          <label>CAN 报文数据库<input type="file" id="databaseUpload" accept=".dbc,.dbf"></label>
+          <label>字符编码<select id="databaseEncoding"><option value="auto">自动识别</option><option value="utf-8">UTF-8</option><option value="gb18030">中文 GB18030 / GBK</option><option value="cp1252">西文 Windows-1252</option></select></label>
+          <div class="wide row"><button class="primary" type="submit">放入模拟 SD 卡</button><button id="databaseExample" type="button">试用 DBC 示例</button><button id="databaseDbfExample" type="button">试用 DBF 示例</button><span id="databaseSource" class="muted"></span></div>
+        </form>
+        <p class="worknote">支持 Vector DBC 和可识别的 BUSMASTER CAN 数据库文本 DBF。其他工具的 DBF 若格式不同会明确提示。文件放入卡后，在设备屏幕点“数据库选帧”操作。这里只模拟复制文件，不设置发送通道或参数。本地每份数据库最多256帧，超过限制会拒绝且不截断。解析使用本机 canmatrix，不上传文件到外部服务。</p>
+        <div id="databasePreview" hidden>
+          <div id="databaseSummary" class="frame-preview"></div>
+          <div class="workform"><label>搜索帧名 / ID / 信号<input id="databaseSearch" type="search" placeholder="如 Engine、123 或 Speed"></label><label>加入通道<select id="databaseCh"><option value="0">CAN1</option><option value="1">CAN2</option></select></label><label>起始发送槽<select id="databaseSlot"><option value="0">第 1 条</option><option value="1">第 2 条</option><option value="2">第 3 条</option><option value="3">第 4 条</option></select></label><div class="row"><button id="databaseClear" type="button">清空选择</button><span id="databaseSelection"></span></div></div>
+          <div class="database-results" id="databaseFrames"></div><p id="databaseApplyHint" class="worknote"></p><button id="databaseApply" type="button" class="primary">加入选中帧（不发送）</button>
+        </div>
+      </div>
+      <div data-pane="record" hidden>
+        <div class="section-kicker">RECORDING SESSION</div><h2>录制命名与新会话</h2>
+        <form id="recordNameForm" class="workform"><label class="wide">下一次录制的自定义名称前缀<input id="recordPrefix" placeholder="留空使用 REC，例如 路试A" autocomplete="off"></label><div class="wide row"><button type="submit" class="primary">保存录制名称</button><button type="button" id="recordNameDefault">恢复系统命名</button></div></form>
+        <p class="worknote">不需要输入固定格式，前缀后自动加入时间与会话序号，例如 路试A_20261026-153000_00000008.log。前缀最多 18 个 UTF-8 字节；停止录制后会在本机弹出保存命名键盘，也可在文件管理中修改完整文件名（最多 47 字节，保留 .log 或 .txt 后缀）。时间无效时显示 NOTIME。</p>
+        <div id="recordCurrentName" class="frame-preview"></div><div class="row"><button type="button" id="recordStart" class="primary">开始新录制</button><button type="button" id="recordStop" class="danger">停止并保存</button><button type="button" id="recordMark" hidden aria-hidden="true">标记</button><button type="button" id="recordFiles">查看已保存记录</button></div><p class="worknote">REC / R 短按开始，再短按停止。文件关闭后弹出命名键盘，保存或保留默认名后即可开始下一次录制。</p>
+      </div>
+      <div data-pane="filter" hidden>
+        <form id="filterForm" class="workform">
+          <label>显示通道<select id="filterCh"><option value="0">全部通道</option><option value="1">CAN1</option><option value="2">CAN2</option></select></label>
+          <label>类型<select id="filterType"><option value="0">全部类型</option><option value="1">仅 CAN FD</option><option value="2">仅错误</option><option value="3">仅发送</option></select></label>
+          <label>匹配 ID（十六进制）<input id="filterId" value="0" maxlength="8" required></label>
+          <label>ID 掩码（0 为不过滤）<input id="filterMask" value="0" maxlength="8" required></label>
+          <label>方向<select id="filterDir"><option value="0">接收 + 发送</option><option value="1">仅接收</option><option value="2">仅发送</option></select></label>
+          <label>标识符格式<select id="filterFormat"><option value="0">标准 + 扩展</option><option value="1">仅标准</option><option value="2">仅扩展</option></select></label>
+          <div class="wide row"><button type="submit" class="primary">应用显示筛选</button><button type="button" id="filterReset">清除筛选</button></div>
+        </form>
+        <p class="worknote">匹配规则：(报文 ID &amp; 掩码) = (匹配 ID &amp; 掩码)。筛选只影响屏幕，录制继续保留全部所选通道的数据。设备上长按 OK 也可设置。</p>
+      </div>
+      <div data-pane="plans" hidden>
+        <p class="worknote">发送文件保存完整报文列表、数据与循环参数。电脑只负责把统一模板放入模拟 SD；在本机选中文件后直接载入手动编辑页，替换文件所含通道的配置，不会自动发送。</p>
+        <div class="row"><a href="/api/plan/template?example=single" download>单路填写模板</a><a href="/api/plan/template?example=dual" download>两路示例</a><a href="/api/plan/template?example=schema" download>JSON 格式说明</a></div>
+        <form id="planForm" class="workform">
+          <label class="wide">上位机导出或手工填写的方案<input type="file" id="planUpload" accept=".canplan.json,application/json"></label>
+          <label class="wide">或粘贴统一模板内容<textarea id="planText" placeholder="选择模板文件，或粘贴 canfd-send-plan / version 1 JSON" spellcheck="false"></textarea></label>
+          <label>方案文件名<input id="planName" value="my-test.canplan.json" required></label>
+          <div class="wide row"><button class="primary" type="submit">放入模拟 SD</button><button type="button" id="planOpen">在本机选择并加载</button><button type="button" id="planRefresh">刷新卡内方案</button></div>
+        </form>
+        <p class="worknote">每路固定 4 个槽，未用槽设 enabled=false。支持单路或两路方案，最多 16 个文件；同名文件保留。文件实际保存在本机模拟 SD 目录，重启后仍可读取。</p>
+        <div id="planList" class="filelist"></div>
+      </div>
+      <div data-pane="files" hidden>
+        <form id="importForm" class="workform">
+          <label class="wide">导入 candump 日志<input type="file" id="logUpload" accept=".log,.txt"></label>
+          <label class="wide">或粘贴日志内容<textarea id="logText" placeholder="(0.000000) can0 123#11223344&#10;(0.100000) can1 456##1AABBCCDDEEFF001122334455" spellcheck="false"></textarea></label>
+          <label>文件名称<input id="logName" value="sample.log" maxlength="40" required></label>
+          <div class="wide row"><button class="primary" type="submit">导入到模拟 SD 卡</button><button type="button" id="logExample">填入双路示例</button></div>
+        </form>
+        <p class="worknote" id="fileLimit">正在读取文件容量…</p>
+        <div id="fileList" class="filelist"></div>
+      </div>
+      <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+    </div></details>
+  </section>
+  <aside class="review-sidebar">
+    <nav class="side-tabs" aria-label="审阅辅助面板"><button type="button" data-side="guide" class="on">操作说明</button><button type="button" data-side="environment">模拟条件</button><button type="button" data-side="engineering">工程信息</button></nav>
+    <div data-side-pane="guide"><section class="panel guide-panel"><div class="section-kicker">当前页面</div><h2 id="guideTitle">从设备概览开始</h2><div id="pageGuide"></div></section><section class="panel review-items"><div class="section-kicker">本轮重点</div><h2>这些地方，请优先体验</h2><ol><li>实时列表是否清楚、够用</li><li>完整报文与变化字节是否易读</li><li>筛选、暂停、录制是否容易区分</li><li>菜单和确认是否符合使用习惯</li></ol><p class="worknote">当前是可交互模拟界面。硬件显示同步与性能优化留待界面确认后继续。</p></section></div>
+    <div data-side-pane="environment" hidden><div class="panel">
+      <h2>环境 <small>模拟外部条件</small></h2>
+      <div class="row"><label>电池</label>
+        <input type="range" id="batt" min="3000" max="4200" step="10" value="3900" style="width:160px">
+        <span id="battv">3900 mV</span>
+        <button id="ext">外部供电</button>
+      </div>
+      <div class="row"><label>SD 卡</label>
+        <button id="sd">拔出</button>
+        <button data-env="sd_fill">写满</button>
+        <button data-env="sd_werr" data-a="1">写错一次</button>
+        <button id="badcard">坏卡</button>
+        <button id="frag">碎片过多</button>
+        <button id="wp">写保护</button>
+        <button id="unsup">文件系统不支持</button>
+        <button id="busy">SD 繁忙</button>
+      </div>
+      <div class="row"><label>USB</label>
+        <button id="usb">插上 USB</button>
+        <button data-env="eject">电脑弹出 U 盘</button>
+      </div>
+      <div class="row"><label>下次开机</label>
+        <select id="chip"><option value="86">芯片 rev V</option><option value="89">芯片 rev Y</option></select>
+        <button id="screenConn" class="on">屏幕已连接</button>
+        <button data-env="rtc_lost">拔电池（RTC 丢失）</button>
+      </div>
+      <div id="buses"></div>
+    </div></div>
+    <div data-side-pane="engineering" hidden><div class="panel">
+      <h2>状态机 <small>当前状态高亮</small></h2>
+      <div class="sm" id="sm"></div>
+      <div class="kv" id="kv"></div>
+    </div><div class="panel">
+      <h2>上位机 <small>请求来自电脑，危险操作要在设备上确认</small></h2>
+      <div class="row"><button id="host">连接上位机</button><span class="muted" id="hostHint"></span></div>
+      <div class="row">
+        <button data-host="rec_start">开始录制</button>
+        <button data-host="rec_stop">停止录制</button>
+        <button data-host="ch_normal" data-a="0">CAN1 切正常</button>
+        <button data-host="ch_normal" data-a="1">CAN2 切正常</button>
+        <button data-host="ch_rate" data-a="0" data-b="250000">CAN1 改 250k</button>
+        <button data-host="autobaud" data-a="0">CAN1 自动识别</button>
+        <button data-host="cyc_on" data-a="0" data-b="0">启动 CAN1 周期发送</button>
+        <button data-host="msc">进入 U 盘模式</button>
+        <button data-host="shutdown" class="danger">远程关机</button>
+      </div>
+    </div><div class="panel">
+      <h2>提示日志 <small>设备弹出的提示，新的在上</small></h2>
+      <div class="log" id="log"></div>
+    </div></div>
+  </aside>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const KEYNAMES = ["↑", "↓", "←", "→", "OK", "BACK", "REC", "POWER"];
+const NBR = [10000, 20000, 33333, 50000, 83333, 100000, 125000, 250000, 500000, 800000, 1000000];
+const DBR = [1000000, 2000000, 4000000, 5000000];
+let S = null, inflight = false, pollPromise = Promise.resolve();
+
+let sendq = Promise.resolve();
+function api(path, body, options={}) {
+  /* 保证按下/松开、编辑/发送的请求顺序，错误也能让后续请求继续。 */
+  const request = sendq.then(async () => {
+    try {
+      const response = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body || {})});
+      const result = await response.json();
+      if (!response.ok || result.error) {
+        if(!options.quiet){reviewFeedback(result.error || "请求未执行", true);
+        if (typeof workFeedback === "function") workFeedback(result.error || "请求未执行", true);}
+        return {...result, failed:true};
+      }
+      await poll(true);
+      return result;
+    } catch (error) {
+      if(!options.quiet){reviewFeedback("连接失败：" + error.message, true);
+      if (typeof workFeedback === "function") workFeedback("连接失败：" + error.message, true);}
+      return {failed:true, error:error.message};
+    }
+  });
+  sendq = request.then(() => undefined, () => undefined);
+  return request;
+}
+const env = (cmd, a = 0, b = 0) => api("/api/env", { cmd, a, b });
+const host = (cmd, a = 0, b = 0) => api("/api/host", { cmd, a, b });
+const key = (k, down) => api("/api/key", { k, down });
+const touch = (kind, a = 0, selection = {}) => api("/api/touch", { kind, a, ...selection });
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function fmtRate(r) { return r >= 1000000 ? r / 1000000 + "M" : r % 1000 ? (r / 1000).toFixed(1) + "k" : r / 1000 + "k"; }
+function battPct(mv) { return Math.max(0, Math.min(100, Math.round((mv - 3300) / 9))); }
+
+/* ---------- 屏幕绘制 ---------- */
+function statusBar(d) {
+ const p=d.power;
+ const channels=d.ch.map((c,i)=> {
+  const mode=c.sid===5?"识别中":c.sid===0?"待机":c.sid===4?"Bus-Off":["只听","受限","正常"][c.mode];
+  const color=c.errst>=3||c.sid===4?"#f17c7c":c.errst>=1?"#e5b861":c.sid===0?"#50627c":"#55bda6";
+  return `<span class="sb-channel"><i class="dot" style="background:${color}"></i><b>CAN${i+1}</b> ${esc(mode)} <small>${esc(c.rate)} · ${(c.load/10).toFixed(0)}%</small></span>`;
+ }).join("");
+ const rec=d.rec.sid===2?`<span class="rec-active">● REC ${hms(d.rec.elapsed)}</span>`:`<span>${d.rec.sid===1?"录制准备中":d.rec.sid===3?"正在收尾":"录制待机"}</span>`;
+ const sd=d.storage.state==="就绪"?"SD 就绪":d.storage.state==="U 盘模式"?"U盘模式":"SD "+d.storage.state;
+ return `<div class="sb"><div class="sb-channels">${channels}</div><div class="sb-footer">${rec}${d.tx_active?'<span class="tx-active">TX 发送中</span>':""}<span class="right"><span>${esc(sd)}</span>${d.storage.usb?"<span>USB</span>":""}${p.locked?"<span>已锁定</span>":""}<span>${p.ext?"外供 · ":""}${battPct(p.batt)}%</span></span></div></div>`;
+}
+function hms(ms) { const s = Math.floor(ms / 1000); return [s / 3600 | 0, (s / 60 | 0) % 60, s % 60].map((x) => String(x).padStart(2, "0")).join(":"); }
+
+const MENU = [["home", "概览", "主页"], ["live", "实时显示", "报文查看与录制"], ["send", "发送报文", "报文列表 / 加载文件"], ["diag", "总线诊断", "负载与错误"], ["files", "文件管理", "卡内文件列表"], ["chset", "通道设置", "模式与位速率"], ["sysset", "系统设置", "屏幕与设备"]];
+
+const PATHS = {
+ home:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+ live:'<path d="M3 7h4l2 10 4-14 3 14 2-7h3"/>',tx:'<path d="m3 11 18-8-8 18-3-8-7-2Zm7 2 6-6"/>',
+ rec:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.3" fill="currentColor" stroke="none"/>',
+ play:'<path d="M7 4.5v15l13-7.5-13-7.5Z"/>',diag:'<path d="M3 12h4l2-6 4 12 3-6h5"/><path d="M5 4h14M5 20h14" opacity=".4"/>',
+ files:'<path d="M3 6h7l2 3h9v11H3V6Z"/><path d="M4 4h6l2 2h7"/>',chset:'<path d="M4 6h5m5 0h6M4 12h9m5 0h2M4 18h2m5 0h9"/><circle cx="11" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>',
+ sysset:'<path d="m9 3-.6 3-2 .9L3.8 6l-2 3.5L4 11v2l-2.2 1.5 2 3.5 2.6-.9 2 .9.6 3h4l.6-3 2-.9 2.6.9 2-3.5L18 13v-2l2.2-1.5-2-3.5-2.6.9-2-.9-.6-3H9Z"/><circle cx="11" cy="12" r="3"/>'
+};
+function icon(name) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name==="send"?"tx":name] || PATHS.home}</svg>`; }
+const TILE_PAGES = ["live","send","diag","files","chset","sysset"];
+const TILE_NOTES = ["查看 · 录制 · 停止","报文列表 / 加载文件","负载与错误","卡内文件列表","模式与位速率","屏幕与设备"];
+function reviewFeedback(message, bad=false) {
+  const box = $("#reviewFeedback"); if (!box) return;
+  box.textContent = message; box.classList.toggle("bad",bad);
+}
+async function uiAction(action, args={}) {
+ if(S?.dev.power.sid===4&&!S.dev.power.screen){
+  await key(7,true);await key(7,false);
+  reviewFeedback("设备屏幕已唤醒，请再次选择菜单或操作。");
+  return {failed:true};
+ }
+ return api("/api/ui",{action, ...args, generation:S ? S.sim.generation : 0});
+}
+function openTool(tab) { const box=$("#workbench"); box.open=true; if(typeof workTab==="function")workTab(tab); if(tab==="filter" && typeof loadFilter==="function")loadFilter(); if(tab==="sequence"&&typeof loadSequence==="function"&&!sequenceDirty)loadSequence(sendChannel); }
+
+function editValue(value, ui) {
+  if (!ui || !ui.numeric) return esc(value);
+  let digits = ui.numeric_digits || 0;
+  if (!digits && ui.page === "filter") digits = 8;
+  else if (!digits && ui.page === "txedit") digits = ui.cursor === 0 ? (ui.editor.flags & 1 ? 8 : 3) : ui.cursor === 6 ? 5 : 2;
+  const match = value.match(/^(0x)?([0-9A-Fa-f]+)(.*)$/);
+  if (!match || !digits) return esc(value);
+  const number = match[2].padStart(digits, "0");
+  return esc(match[1] || "") + [...number].map((c,i) => i === ui.digit ? `<span class="digit-edit">${c}</span>` : c).join("") + esc(match[3]);
+}
+function listView(items, cur, ui) {
+  const rows = 7, n = items.length;
+  let start = Math.max(0, Math.min(cur - 3, n - rows));
+  let h = `<div class="list">`;
+  for (let i = start; i < Math.min(n, start + rows); i++) {
+    const it = items[i];
+    const plan = ui?.page === "send_files" ? S?.work?.send_plans?.files.find(file=>file.index===i&&file.name===it.l) : null;
+    const identity = plan ? ` data-plan-token="${plan.token}" data-plan-name="${esc(plan.name)}" data-plan-generation="${S.sim.generation}"` : "";
+    const cls = ["it", i === cur ? "sel" : "", it.f & 2 ? "dis" : "", it.f & 4 ? "warn" : "", it.f & 8 ? "act" : "", it.f & 16 ? "action" : ""].join(" ");
+    h += `<div class="${cls}" data-item="${i}"${identity} role="button" tabindex="0" aria-disabled="${!!(it.f & 2)}"><span class="l">${esc(it.l)}</span><span class="v">${i === cur ? editValue(it.v, ui) : esc(it.v)}</span></div>`;
+  }
+  h += `</div>`;
+  if (n > rows) {
+    const top = (start / n) * 100, hh = (rows / n) * 100;
+    h += `<div class="scroll"><i style="top:${top}%;height:${hh}%"></i></div>`;
+  }
+  return h;
+}
+
+function visibleLiveRows(L) {
+ const all=L.rows || [], at=Math.max(0,all.findIndex(r=>r.i===L.cur));
+ const start=Math.max(0,Math.min(at-2,all.length-6));
+ const rows=all.slice(start,start+6); return L.view==="scroll"?rows.reverse():rows;
+}
+function liveView(L,d) {
+ const byid=L.view==="byid", f=L.filter_cfg||{};
+ const channel=L.channel||1;
+ const filter=[...(f.channel?["筛选 CAN"+f.channel]:[]),f.direction===1?"RX":f.direction===2?"TX":"RX+TX",f.format===1?"标准帧":f.format===2?"扩展帧":"全部格式"];
+ if(f.mask)filter.push("ID "+Number(f.id).toString(16).toUpperCase()+"/"+Number(f.mask).toString(16).toUpperCase());
+ if(f.type)filter.push(["","仅 FD","仅错误","仅发送"][f.type]);
+ let h=`<div class="live"><div class="live-controls"><button type="button" data-ui-channel="1" class="channel-tab ${channel===1?'active':''}" aria-pressed="${channel===1}" aria-label="查看 CAN1 报文">CAN1</button><button type="button" data-ui-channel="2" class="channel-tab ${channel===2?'active':''}" aria-pressed="${channel===2}" aria-label="查看 CAN2 报文">CAN2</button><span class="view-separator"></span><button type="button" data-ui-view="0" class="${!byid?"active":""}" aria-pressed="${!byid}">滚动</button><button type="button" data-ui-view="1" class="${byid?"active":""}" aria-pressed="${byid}">按 ID</button><span class="spacer"></span><button type="button" data-ui-pause="${!L.paused}" class="freeze">${L.paused?"▶ 继续跟随":"Ⅱ 暂停显示"}</button><button type="button" data-ui-filter="1">筛选</button></div><div class="live-context"><span class="state-pill ${L.paused?"paused":""}">CAN${channel} · ${L.paused?"已暂停显示":"● 实时跟随"}</span><span class="filter-text">${esc(filter.join(" · "))}</span><span style="margin-left:auto" title="上下拖动或滚轮查看；浏览历史暂停跟随，后台录制继续">↕ ${L.total?L.cur+1:0}/${L.total || 0} ${byid?"个 ID":"条缓存"}</span></div>`;
+ const rows=visibleLiveRows(L);
+ if(!rows.length) return h+`<div class="live-empty"><strong>还没有匹配的报文</strong><small>查看 CAN${channel} 是否接入，或在“筛选”中放宽条件</small></div>${liveRecordView(d)}</div>`;
+ h+=`<table><colgroup><col style="width:76px"><col style="width:56px"><col style="width:44px"><col style="width:24px"><col>${byid?'<col style="width:48px"><col style="width:43px">':'<col style="width:75px">'}</colgroup><thead><tr><th>报文 ID</th><th>收 / 发</th><th>帧类型</th><th>长度</th><th>数据 · 上下滑动 / 点行详情</th>${byid?"<th>周期 ms</th><th>次数</th>":"<th>时间 s</th>"}</tr></thead><tbody>`;
+ for(const r of rows) {
+  const flags=r.flags||0,err=r.err||(flags&64),tx=r.direction?r.direction==="TX":!!(r.tx||(flags&32));
+  const values=Array.isArray(r.bytes)?r.bytes.slice(0,8).map(n=>Number(n).toString(16).padStart(2,"0").toUpperCase()):String(r.data||"").split(" ").slice(0,8);
+  const bytes=values.map((v,i)=>r.changed?.[i]||((r.chg||0)>>i)&1?`<span class="chg">${esc(v)}</span>`:esc(v)).join(" ")+(r.len>8?" …":"");
+  const type=err?"ERR":flags&16?"RTR":flags&2?flags&4?"FD B":"FD":"CAN";
+  const cls=[r.i===L.cur?"sel":"",err?"err":"",tx?"tx":"",r.timeout?"to":""].join(" ");
+  h+=`<tr class="${cls}" data-live-index="${r.i}" ${!byid && r.seq!==undefined?`data-live-seq="${r.seq}"`:""} role="button" tabindex="0" aria-label="CAN${r.ch} ${tx?'TX 发送':'RX 接收'} 报文 ${idHex(r)} 详情"><td data-col="id">${idHex(r)}</td><td><span class="direction-badge ${tx?'tx-badge':'rx-badge'}">${tx?'TX 发送':'RX 接收'}</span></td><td><span class="frame-kind">${type}</span></td><td>${r.len}</td><td>${err?"错误状态记录":bytes||"—"}</td>${byid?`<td>${esc(r.per)}</td><td>${r.count}</td>`:`<td>${esc(r.t)}</td>`}</tr>`;
+ }
+ return h+`</tbody></table>${liveRecordView(d)}</div>`;
+}
+function detailView(D) {
+ if(!D || !D.valid) return '<div class="live-empty"><strong>报文快照已失效</strong><small>返回实时列表重新选择</small></div>';
+ const flags=D.flags||0, data=D.data||[], period=D.has_summary&&D.period_avg_us? (D.period_avg_us/1000).toFixed(3)+" ms":"—";
+ const id=idHex(D), stamp=(Number(D.ts_us)/1e6).toFixed(6)+" s";
+ let h=`<div class="frame-detail"><div class="detail-head"><span class="detail-id">${D.err?"错误事件":id}</span><span class="detail-tag">CAN${D.ch}</span><span class="detail-tag ${D.tx?"tx":""}">${D.tx?"TX 发送":"RX 接收"}</span><span class="detail-sub"><button type="button" data-copy-detail="1">复制数据</button></span></div><div class="detail-meta"><span>帧格式<b>${D.ext?"扩展 29 位":"标准 11 位"} · ${flags&2?"CAN FD":"CAN"}${flags&4?" / BRS":""}${D.rtr?" / RTR":""}</b></span><span>数据长度<b>${D.len} B${D.truncated?" · 部分可用":""}</b></span><span>时间戳<b>${stamp}</b></span><span>平滑周期<b>${period}</b></span><span>最小 / 最大周期<b>${D.has_summary&&D.period_min_us?(D.period_min_us/1000).toFixed(2)+" / "+(D.period_max_us/1000).toFixed(2)+" ms":"—"}</b></span><span>累计次数<b>${D.has_summary?D.count:"—"}</b></span></div><div class="payload-title"><span>${D.rtr?"RTR 请求，无数据载荷":"DATA / HEX"}</span><span>快照 · ${D.available_len} / ${D.rtr?0:D.len} 字节</span></div><div class="byte-grid">`;
+ for(let offset=0;offset<data.length;offset+=8)h+=`<div class="byte-row"><span class="offset">${offset.toString(16).toUpperCase().padStart(2,"0")}</span>${Array.from({length:8},(_,i)=>`<span>${offset+i<data.length?Number(data[offset+i]).toString(16).toUpperCase().padStart(2,"0"):""}</span>`).join("")}</div>`;
+ if(!data.length)h+='<div class="detail-note">'+(D.rtr?"长度表示请求的数据长度，远程帧本身没有数据字节。":"此记录没有数据字节。")+'</div>';
+ h+=`</div><p class="detail-note">${D.has_summary?"累计 "+D.count+" 次 · 平滑周期 "+period+" · ":""}${D.truncated?"当前只保留前 "+D.available_len+" B，其余数据未保存在显示缓存。":"查看的是选中报文的固定快照。"}${S?.sim.paused?"模拟时间已暂停。":"后台采集和录制不受详情查看影响。"}</p></div>`;
+ return h;
+}
+
+function idHex(r) { return (r.ext ? r.id.toString(16).toUpperCase().padStart(8, "0") : r.id.toString(16).toUpperCase().padStart(3, "0")); }
+
+function dialog(D) {
+  if (!D || !D.kind) return "";
+  let h = `<div class="dlg-mask"><div class="dlg" role="dialog" aria-modal="true" aria-label="设备确认"><div class="tx">${esc(D.text)}</div>`;
+  if (D.kind === "menu") {
+    D.opts.forEach((o, i) => { h += `<div class="opt ${i === D.cur ? "sel" : ""}" data-dlg="${i}" role="button" tabindex="0">${esc(o)}</div>`; });
+    h += `<div class="q">↑↓ 选择，OK 确定，BACK 取消</div>`;
+  } else {
+    h += `<div class="bt">${D.cancel ? `<span data-dlg="1" role="button" tabindex="0">${esc(D.cancel)}（BACK）</span>` : ""}<span class="ok" data-dlg="0" role="button" tabindex="0">${esc(D.ok)}（OK）</span></div>`;
+  }
+  if (D.queued) h += `<div class="q">后面还有 ${D.queued} 个待确认</div>`;
+  return h + `</div></div>`;
+}
+
+const txListPositions=new Map();
+const txListKey=p=>`${p.dataset.generation}:${p.dataset.mask}:${p.dataset.source||''}`;
+function setScr(html) {
+  const scr = $("#scr");
+  if (scr._h === html) return;
+  const previous=scr.querySelector('.tx-message-list');
+  if(previous){
+    txListPositions.set(txListKey(previous),previous.scrollTop);
+    const same=S?.dev.ui.page==='tx'&&!S.dev.ui.dlg?.kind&&S.dev.power.screen&&
+      Number(previous.dataset.generation)===S.sim.generation&&Number(previous.dataset.mask)===S.dev.ui.tx_scope_mask&&
+      (previous.dataset.source||'')===(S.work.send_plans?.loaded_name||'');
+    if(same&&typeof txListRenderBusy==='function'&&txListRenderBusy())return;
+  }
+  scr.innerHTML=html;scr._h=html;
+  const next=scr.querySelector('.tx-message-list');
+  if(next)next.scrollTop=txListPositions.get(txListKey(next))||0;
+}
+function renderScreen(d) {
+  syncBackspaceHold(d);
+  const scr = $("#scr"), p = d.power, ui = d.ui;
+  scr.classList.remove("dark");
+  if (p.sid === 0) {                                  /* 关机 */
+    scr.classList.add("dark");
+    setScr(`<div class="center"><div class="empty-mark">◉</div><strong>CAN FD · Rev D</strong><span>设备尚未启动<br>点击上方“启动设备预览”，或按住 POWER 1 秒</span></div>`);
+    return;
+  }
+  if (p.sid === 1 || p.sid === 2 || p.sid === 3) {
+    setScr(`<div class="center">开机中…<br><span style="font-size:11px">${p.sid === 2 ? "检测到 BACK+REC，按满 3 秒进入升级模式" : "按住不满 1 秒就松开会被当成误触，自动断电"}</span></div>`);
+    return;
+  }
+  if (p.sid === 6) {
+    setScr(`<div class="center" style="background:#0d2a5c;color:#cfe0ff">升级模式（Bootloader）<br><span style="font-size:11px">等待 SD 卡 /FW/ 下的升级包或 USB DFU<br>长按 POWER 2 秒关机</span></div>`);
+    return;
+  }
+  if (p.sid === 5) {
+    setScr(`<div class="center">正在关机…<br><span style="font-size:11px">先停止录制并关好文件，再关 CAN、屏幕、5V；松开 POWER 后断电</span></div>`);
+    return;
+  }
+  if (p.no_screen) {
+    scr.classList.add("dark");
+    setScr(`<div class="center" style="color:#555">（无屏模式：开机时没检测到屏幕）<br>REC 键照常启停录制，看 LED</div>`);
+    return;
+  }
+  if (!p.screen) {
+    scr.classList.add("dark");
+    setScr(`<div class="center" style="color:#2a2a2a">熄屏中（第一下按键只唤醒）${p.locked ? "<br>按键已锁定，只有 POWER 能唤醒" : ""}</div>`);
+    return;
+  }
+  let h = statusBar(d);
+  const right=ui.page==="live"?(ui.live.paused?"列表已冻结":"实时更新"):ui.page==="detail"?"报文快照":ui.page==="tx"?"OK 单发 · → 周期":ui.page==="txedit"?"草稿 · 保存后生效":ui.page==="filter"?"只影响显示":ui.page==="plan_detail"?esc((ui.plan_view?.selected_name||"").replace(/\.canplan\.json$/i,"")):ui.page==="plan_entry"?`CAN${(ui.plan_view?.entry_channel||0)+1} · 第${(ui.plan_view?.entry_index||0)+1}条`:"";
+  h+=`<div class="tb">${ui.page!=="home"?'<span class="back" data-back="1" role="button" tabindex="0" aria-label="返回上一页">‹</span>':""}<span class="t">${esc(ui.title)}</span><span class="r">${right}</span></div><div class="content">`;
+  if(ui.page==="home") h+='<div class="tiles">'+ui.items.map((it,i)=>`<div class="tile ${i===ui.cursor?"sel":""}" data-item="${i}" role="button" tabindex="0"><span class="ic">${icon(TILE_PAGES[i])}</span>${esc(it.l)}<small>${TILE_NOTES[i]}</small></div>`).join("")+'</div>';
+  else if(ui.page==="live")h+=liveView(ui.live,d);
+  else if(ui.page==="detail")h+=detailView(ui.detail);
+  else if(ui.keyboard&&typeof localKeyboardView==="function")h+=localKeyboardView(ui);
+  else if(ui.page==="txedit"&&typeof txEditorView==="function")h+=txEditorView(ui);
+  else if(ui.page==="tx"&&typeof sendPageView==="function")h+=sendPageView(d);
+  else if(ui.page==="rec"&&typeof recordPageView==="function")h+=recordPageView(d);
+  else h+=listView(ui.items,ui.cursor,ui);
+  h+='</div>';
+  let hint=ui.local_notice||ui.hint||"↑↓ 选择 · OK 确定 · BACK 返回";
+  if(ui.page==="live")hint=S?.sim.paused?"模拟时间已暂停：采集、发送与录制都暂停推进":ui.live.paused?`显示已暂停 · 后台继续采集${d.rec.sid===2?"并录制":""} · 新增 ${ui.live.hidden} 帧`:`点报文查看完整数据 · ${ui.live.view===0&&ui.live.sampled>1?"屏幕抽样 1/"+ui.live.sampled:"录制不受显示筛选影响"}`;
+  if(ui.page==="detail")hint="BACK 返回原列表 · 详情为固定快照，不会自动跳到新报文";
+  if(ui.page==="tx")hint="CAN1 / CAN2 独立启停 · 上下滑动两组列表 · 单发仅作用于该行该路";
+  if(ui.page==="rec")hint=ui.cursor===7?"上次结果："+(ui.items[7]?.v||"—"):"REC / R 短按开始，再短按停止后命名 · ↑↓ 选择设置";
+  if(ui.page==="home")hint="触摸菜单或方向键选择 · REC 短按启停录制 · POWER 长按关机";
+  h+=`<div class="lcd-hint ${ui.local_error?'local-error':''}" title="${esc(hint)}">${esc(hint)}</div>`;
+  if (p.countdown) h += `<div class="banner">${p.countdown} 秒后自动关机，按任意键取消</div>`;
+  if (ui.toast) h += `<div class="toast">${esc(ui.toast)}</div>`;
+  h += dialog(ui.dlg);
+  setScr(h);
+}
+
+/* ---------- 侧边面板 ---------- */
+function renderPanels(s) {
+  const d = s.dev, e = s.env;
+  renderReview(s);
+  $("#sm").innerHTML = d.sm.filter(m=>!m.n.startsWith("回放")).map((m) => `<div class="n">${esc(m.n)}</div><div class="chips">${m.s.map((x, i) =>
+    `<span class="chip ${i === m.c ? "cur" : ""}">${esc(x)}</span>`).join("")}</div>`).join("") +
+    `<div class="n">界面</div><div class="chips"><span class="chip cur">${esc(d.ui.title)}</span>${d.ui.dlg && d.ui.dlg.kind ? `<span class="chip cur" style="background:var(--warn)">对话框</span>` : ""}</div>`;
+  const p = d.power;
+  const kv = [
+    ["屏幕", p.screen ? "亮" : "灭"], ["按键锁", p.locked ? "锁定" : "—"], ["POWER 生效", p.armed ? "是" : "等第一次松开"],
+    ["LED STAT", d.led.stat_pat], ["LED REC", d.led.rec_pat], ["电池", `${p.batt} mV${p.ext ? " · 外部供电" : ""}`],
+    ["CAN1 TEC/REC", `${d.ch[0].tec}/${d.ch[0].rec}`], ["CAN2 TEC/REC", `${d.ch[1].tec}/${d.ch[1].rec}`],
+    ["CAN1 负载", `${(d.ch[0].load / 10).toFixed(1)}% · ${d.ch[0].fps} 帧/s`], ["CAN2 负载", `${(d.ch[1].load / 10).toFixed(1)}% · ${d.ch[1].fps} 帧/s`],
+    ["录制", `${d.rec.frames} 帧 · 分段 ${d.rec.seg} · 丢 ${d.rec.drops}`],
+    ["模拟时间", (d.now / 1000).toFixed(1) + " s"],
+  ];
+  $("#kv").innerHTML = kv.map(([k, v]) => `<div><span class="muted">${k}</span> <b>${esc(v)}</b></div>`).join("");
+  $("#log").innerHTML = d.ui.log.slice().reverse().map((l) => `<div><span>${(l.t / 1000).toFixed(1)}s</span>${esc(l.s)}</div>`).join("");
+
+  $("#ledStat").classList.toggle("on", d.led.stat);
+  $("#ledRec").classList.toggle("on", d.led.rec);
+  $("#ledChg").classList.toggle("on", e.ext || e.usb);
+  $("#devInfo").textContent = e.powered ? `5V ${e.v5 ? "开" : "关"} · 背光 ${e.backlight}%` : "断电";
+
+  $("#battv").textContent = e.batt + " mV";
+  if (document.activeElement !== $("#batt")) $("#batt").value = e.batt;
+  setOn("#ext", e.ext); setOn("#usb", e.usb); $("#usb").textContent = e.usb ? "拔掉 USB" : "插上 USB";
+  $("#sd").textContent = e.sd.present ? "拔出 SD 卡" : "插入 SD 卡";
+  setOn("#badcard", e.sd.werr === 2); setOn("#frag", e.sd.frag); setOn("#wp", e.sd.wp); setOn("#unsup", e.sd.unsupported); setOn("#busy", e.sd.busy);
+  setOn("#host", e.host); $("#host").textContent = e.host ? "断开上位机" : "连接上位机";
+  $("#hostHint").textContent = e.usb ? "" : "先插上 USB";
+  setOn("#screenConn", e.screen); $("#screenConn").textContent = e.screen ? "屏幕已连接" : "屏幕未连接";
+  if (document.activeElement !== $("#chip")) $("#chip").value = e.chip === "Y" ? "89" : "86";
+  renderBuses(e.bus);
+  if (typeof renderWorkbench === "function") renderWorkbench(s);
+  if (typeof renderControls === "function") renderControls(s);
+  document.querySelectorAll("[data-speed]").forEach((b) => b.classList.toggle("on", +b.dataset.speed === s.sim.speed));
+  setOn("#pause", s.sim.paused); $("#pause").textContent = s.sim.paused ? "继续模拟" : "暂停模拟";
+  $("#step").disabled=!s.sim.paused;
+}
+function setOn(sel, on) { $(sel).classList.toggle("on", !!on); }
+
+let busesBuilt = false;
+function renderBuses(bus) {
+  const box = $("#buses");
+  if (!busesBuilt) {
+    box.innerHTML = bus.map((_, ch) => `<div class="buscard"><h3>CAN${ch + 1} 总线 <span class="muted" id="bs${ch}"></span></h3>
+      <div class="row"><button id="bconn${ch}">已接入</button>
+        <select id="bnbr${ch}">${NBR.map((r) => `<option value="${r}">${fmtRate(r)}</option>`).join("")}</select>
+        <button id="bfd${ch}">FD</button>
+        <select id="bdbr${ch}">${DBR.map((r) => `<option value="${r}">数据段 ${fmtRate(r)}</option>`).join("")}</select></div>
+      <div class="row"><select id="bnodes${ch}"><option value="0">空总线（没有别的节点）</option><option value="1">只有 1 个发送节点</option><option value="2">正常网络（≥2 个节点）</option></select>
+        <select id="bfps${ch}">${[0, 20, 60, 200, 1000, 3000].map((f) => `<option value="${f}">${f} 帧/s</option>`).join("")}</select>
+        <button id="berr${ch}">注入错误 1 s</button><button id="bov${ch}">FIFO 溢出</button></div></div>`).join("");
+    bus.forEach((_, ch) => {
+      $(`#bconn${ch}`).onclick = () => env("bus_conn", ch, S.env.bus[ch].conn ? 0 : 1);
+      $(`#bnbr${ch}`).onchange = (ev) => env("bus_nbr", ch, +ev.target.value);
+      $(`#bdbr${ch}`).onchange = (ev) => env("bus_dbr", ch, +ev.target.value);
+      $(`#bfd${ch}`).onclick = () => env("bus_fd", ch, S.env.bus[ch].fd ? 0 : 1);
+      $(`#bnodes${ch}`).onchange = (ev) => env("bus_nodes", ch, +ev.target.value);
+      $(`#bfps${ch}`).onchange = (ev) => env("bus_fps", ch, +ev.target.value);
+      $(`#berr${ch}`).onclick = () => env("bus_err", ch, 1000);
+      $(`#bov${ch}`).onclick = () => env("bus_overload", ch, 25);
+    });
+    busesBuilt = true;
+  }
+  bus.forEach((b, ch) => {
+    $(`#bconn${ch}`).textContent = b.conn ? "已接入" : "未接入"; setOn(`#bconn${ch}`, b.conn);
+    setOn(`#bfd${ch}`, b.fd);
+    for (const [id, v] of [["bnbr", b.nbr], ["bdbr", b.dbr], ["bnodes", b.nodes], ["bfps", b.fps]])
+      if (document.activeElement !== $(`#${id}${ch}`)) $(`#${id}${ch}`).value = v;
+    const st = !b.started ? "控制器停止" : b.probing ? "探测速率中" : `控制器 ${b.mode} ${fmtRate(b.c_nbr)} · ${b.match ? "速率匹配" : "速率不匹配"} · TEC ${b.tec} REC ${b.rec}${b.busoff ? " · Bus-Off" : ""}${b.txq ? " · 待发 " + b.txq : ""}`;
+    $(`#bs${ch}`).innerHTML = b.busoff || !b.match ? `<span class="err">${esc(st)}</span>` : esc(st);
+  });
+}
+
+/* ---------- 审阅辅助 ---------- */
+const GUIDE = {
+ send:["两路独立开关，各用各自列表","CAN1、CAN2 分别开启或停止本路循环。两组8条固定显示，行内可编辑、设置时序或单发；加载文件不自动发送，保存列表包含两路。",[["加载文件","plan:0"],["保存两路列表","plan:2"]]],
+ send_files:["直接按文件内容载入","文件中的通道、帧格式、长度、数据与时序会完整恢复，不必重新选格式。只替换文件包含通道的列表，加载不自动发送。",[["导入发送文件","tool:plans"]]],
+ local_input:["直接用屏幕键盘输入","点数字或十六进制键输入当前字段，也可用电脑键盘或粘贴。确定后回到原草稿；取消保留原字段，最后保存或应用外层设置才生效。",[]],
+ local_record_save:["录制结束，命名后保存","文件已关闭，输入本次录制文件名后点保存；退格支持长按连续删除，无后缀会自动补 .log。重名不会覆盖；返回或保留默认名也会保留这次录制。",[]],
+ file_detail:["文件操作放在详情中","日志详情可保护或改名。文件列表最下面保留 U 盘模式与格式化。",[]],
+ txset:["本机设置循环参数","点需要修改的数字字段，打开屏幕数字键盘直接输入；保存生效，BACK 取消草稿。",[]],
+ txtiming:["每条 ID 的本地时序","次数、间隔和总周期可点字段后直接用屏幕键盘输入。返回总览保留草稿，保存后才更新运行配置。",[]],
+ local_db:["从 SD 数据库选择","先在本机选目标通道和发送槽，再浏览卡内的 DBC / DBF。电脑下方只模拟向 SD 卡放入文件。",[]],
+ local_frames:["本机浏览帧定义","用方向键选择帧名，OK 看定义，再确认加入所选槽。加入后可在本机编辑 ID 和数据。",[]],
+ local_frame:["确认定义后加入","定义的 ID、类型与长度会替换目标发送槽，数据初始化为 00；不会自动发送。",[]],
+ local_name:["设置默认文件名前缀","方向键或触摸输入默认前缀；录制结束后仍可为本次文件自定义名称。保存生效，BACK 取消。",[]],
+ local_rename:["本机修改文件名","屏幕键盘支持字母数字、常用符号和中文快捷词。保留 .log / .txt 后缀；正在写入的文件不能改名。",[]],
+ local_files:["本机选择文件后改名","选择已关闭且未受保护的日志，OK 打开本机字符键盘。",[]],
+ home:["查看与录制放在一起","REC / R 短按开始录制，再短按停止后命名。发送报文直接显示两路各自列表，可编辑或加载文件。",[["查看报文与录制","navigate:live"],["打开报文列表","navigate:send"]]],
+ live:["同一页查看与录制","CAN1 / CAN2 分页查看，RX接收与TX发送单独标明；切换或上下滑动不影响录制。底部仅显示状态，REC / R 短按开始，再短按停止后命名。",[["打开显示筛选","filter"],["暂停 / 继续显示","pause"]]],
+ detail:["完整报文，一眼读清","十六进制数据按 8 字节分行。这里是选中帧的固定快照；返回会恢复原来的列表与跟随状态。",[["复制数据","copy"],["复制到本地发送草稿","draft"],["返回实时列表","back"]]],
+ tx:["两路独立开关，各用各自列表","两组共8条始终可看，停发时可编辑准备。CAN1 / CAN2 绿亮表示本路实际发送，等待确认显示琥珀；两个都亮表示两路各自循环。行内单发仅发该行该路；每组单独设循环或选帧，保存列表保留两路。",[["加载文件","plan:0"],["保存两路列表","plan:2"]]],
+ txedit:["点字段，直接输入","ID、周期和字节值使用屏幕键盘；“完整数据”可一次输入整帧十六进制字节。确定写入草稿，最后点保存生效；已加载文件的帧格式直接沿用。",[]],
+ filter:["只筛选显示，不筛掉录制","通道、方向、ID 掩码与帧类型可组合。应用会清空旧显示结果并恢复跟随；取消保留原列表。",[["展开桌面筛选工具","tool:filter"]]],
+ rec:["REC 短按启停，结束后命名","REC / R 短按开始，再短按停止；文件关闭后弹出命名键盘。保存自定义名称或保留默认名后可新录，取消命名也不会删除文件。",[["默认文件名前缀","local:3"],["本地文件改名","local:5"]]],
+ play:["保存这一屏，下次完整复现","在本机保存当前路或两路发送列表；选择方案后可先查看、仅加载，再执行一轮或循环执行。上位机使用同一模板。",[["保存当前路这一屏","plan:1"],["两路一起保存","plan:2"],["放入或导出方案文件","tool:plans"]]],
+ plan_detail:["先核对方案，再加载或执行","方案包含完整报文和时序；仅加载不会发送。执行一轮按各 ID 设置的次数完成后自动停止，循环执行持续到手动停止。",[]],
+ plan_entry:["完整载荷与循环参数","逐条核对 ID、协议、完整字节、动态字段和循环时间，返回后选择加载或执行。",[]],
+ local_plan_name:["本机保存发送方案","命名时已固定整屏快照。保留 .canplan.json 后缀，保存到模拟 SD 后可下载，也可在重启后重新加载。",[]],
+ diag:["两路状态分别看","查看每路负载、帧率和错误计数。需要演示断线或错误状态时，在“模拟条件”中设置。",[["打开模拟条件","environment"]]],
+ files:["先查看卡内文件","直接显示日志与发送方案。选择文件查看详情；U 盘模式和格式化放在列表最下面。",[["本地文件列表与改名","local:5"],["导出模拟日志样例","tool:files"]]],
+ chset:["当前通道参数要清楚","每路工作模式、标称速率、CAN FD 和数据速率独立设置。切正常模式可能影响总线，需要设备确认。",[]],
+ sysset:["把常用设置放在前面","先检查屏幕超时、背光、时间与返回逻辑。工程信息不作为日常操作入口。",[]],
+ eng:["工程信息只用于排查","这里展示诊断与演示计数，不表示真实硬件已连接。底层优化本轮暂停。",[]]
+};
+function detailGuide(d) {
+ if(!d?.valid)return "";
+ const fmt=n=>n?(n/1000).toFixed(3)+" ms":"—";
+ return `<div class="guide-detail"><div>报文 ID<b>0x${idHex(d)}</b></div><div>源通道 / 方向<b>CAN${d.ch} · ${d.tx?"TX":"RX"}</b></div><div>本帧时间<b>${(d.ts_us/1e6).toFixed(6)} s</b></div><div>上一条同 ID 间隔<b>${d.has_interval?fmt(d.dt_us):"未保留"}</b></div><div>平滑周期（EWMA）<b>${d.has_summary?fmt(d.period_avg_us):"—"}</b></div><div>最小 / 最大周期<b>${d.has_summary?fmt(d.period_min_us)+" / "+fmt(d.period_max_us):"—"}</b></div><div>累计次数<b>${d.has_summary?d.count:"—"}</b></div><details><summary>展开十六进制数据</summary><div>${(d.data||[]).map(n=>Number(n).toString(16).toUpperCase().padStart(2,"0")).join(" ")||"无数据字节"}</div></details></div>`;
+}
+let guideKey="";
+function renderReview(s) {
+ const d=s.dev,p=d.power,ui=d.ui;
+ const sendPages=["send","send_files","play","plan_detail","plan_entry","local_plan_name","tx","txedit","txset","txtiming","local_db","local_frames","local_frame"];
+ const contextPage=ui.page==="local_input"?(ui.parent_page||ui.return_page||"txedit"):ui.page;
+ const navPage=sendPages.includes(contextPage)?"send":["rec","local_name","local_record_save","detail","filter"].includes(contextPage)?"live":["local_files","local_rename","file_detail"].includes(contextPage)?"files":contextPage==="eng"?"sysset":contextPage;
+ document.querySelectorAll("[data-page]").forEach(b=>{const active=b.dataset.page===navPage;b.classList.toggle("active",active);b.setAttribute("aria-current",active?"page":"false");});
+ $("#previewTitle").textContent=p.sid===4?ui.title:"设备概览";
+ $("#bootPreview").textContent=p.sid===4?p.screen?"返回主页":"唤醒屏幕":"启动设备预览";
+ $("#reviewState").textContent=s.sim.paused?"模拟时间已暂停":p.sid!==4?"等待启动":ui.page==="detail"?"固定报文快照":ui.page==="live"&&ui.live.paused?"显示暂停 · 后台运行":"本地实时运行";
+ const cards=d.ch.map((c,i)=>`<div class="status-card"><span class="label"><i class="dot" style="background:${c.sid===4?"#c86666":c.sid?"#2aaa8e":"#a8b3c1"}"></i>CAN${i+1}</span><div class="value">${esc(c.state)} · ${esc(c.rate)}</div><div class="detail">${c.fps} 帧/s · 负载 ${(c.load/10).toFixed(1)}%</div></div>`).join("");
+ $("#quickStatus").innerHTML=cards+`<div class="status-card"><span class="label">录制 / SD</span><div class="value">${esc(d.rec.state)} · ${esc(d.storage.state)}</div><div class="detail">${d.rec.frames} 帧 · ${hms(d.rec.elapsed)}${d.rec.drops?" · 丢 "+d.rec.drops:""}</div></div>`;
+ const current=p.sid===4?(GUIDE[ui.page]||GUIDE.home):["开始预览设备界面","点击“启动设备预览”，会按真实开机流程启动模拟设备。所有报文来自电脑内的模拟总线。",[["启动设备预览","boot"]]];
+ const k=JSON.stringify([ui.page,p.sid,p.screen,p.locked,!!ui.dlg?.kind,ui.page==="detail"?ui.detail:null]);
+ if(k!==guideKey){guideKey=k;$("#guideTitle").textContent=current[0];$("#pageGuide").innerHTML=`<p class="guide-sub">${current[1]}</p>${ui.page==="detail"?detailGuide(ui.detail):""}<div class="guide-actions">${current[2].map(([label,action])=>`<button type="button" data-guide="${action}">${label}</button>`).join("")}</div><div class="key-guide"><div><kbd>↑ ↓ / 触摸</kbd><span>选择条目</span></div><div><kbd>OK / Enter</kbd><span>查看或确认</span></div><div><kbd>BACK / Esc</kbd><span>返回或取消</span></div><div><kbd>REC / R</kbd><span>短按开始 / 再短按停止后命名</span></div></div><p class="guide-note">${p.locked?"设备已锁定，请用原按键流程解锁。":ui.dlg?.kind?"请先处理设备屏幕中的确认，快捷导航不会跳过它。":"发送设置、选帧和命名均在本机菜单完成；保存配置不会自动发送。"}</p>`;}
+}
+function showSide(name){document.querySelectorAll("[data-side]").forEach(b=>b.classList.toggle("on",b.dataset.side===name));document.querySelectorAll("[data-side-pane]").forEach(p=>p.hidden=p.dataset.sidePane!==name);}
+async function bootPreview() {
+ if(!S)return; const button=$("#bootPreview");button.disabled=true;
+ try {
+  if(S.dev.power.sid===4){if(!S.dev.power.screen){await key(7,true);await key(7,false);}else await uiAction("navigate",{page:"home"});return;}
+  if(S.sim.paused)await api("/api/sim",{pause:false});
+  await key(7,true);
+  const until=performance.now()+2500;
+  while(S?.dev.power.sid!==4&&performance.now()<until){await new Promise(resolve=>setTimeout(resolve,80));await poll(true);}
+  await key(7,false);reviewFeedback(S?.dev.power.sid===4?"设备已启动。可以从菜单开始体验。":"仍在启动，请查看屏幕提示。",S?.dev.power.sid!==4);
+ } finally {button.disabled=false;}
+}
+document.querySelectorAll("[data-icon]").forEach(el=>el.innerHTML=icon(el.dataset.icon));
+document.querySelectorAll("[data-page]").forEach(b=>b.onclick=async()=>{const result=await uiAction("navigate",{page:b.dataset.page});if(!result.failed)reviewFeedback("已进入"+b.querySelector("b").textContent+"。",false);});
+document.querySelectorAll("[data-side]").forEach(b=>b.onclick=()=>showSide(b.dataset.side));
+$("#bootPreview").onclick=bootPreview;
+$("#pageGuide").onclick=async ev=>{const b=ev.target.closest("[data-guide]");if(!b)return;const action=b.dataset.guide;if(action.startsWith("plan:"))await openPlan(+action.split(":")[1]);else if(action.startsWith("local:"))await openDeviceMenu(+action.split(":")[1]);else if(action==="localedit")await editOnDevice(sendChannel,S.dev.ui.cursor<8?S.dev.ui.cursor%4:0);else if(action.startsWith("navigate:"))await uiAction("navigate",{page:action.split(":")[1]});else if(action.startsWith("tool:"))openTool(action.split(":")[1]);else if(action==="boot")await bootPreview();else if(action==="filter")await uiAction("filter_open");else if(action==="pause")await uiAction("live_pause",{paused:!S.dev.ui.live.paused});else if(action==="copy")await copyDetailData();else if(action==="draft"){const r=await controlRequest("/api/local/detail-copy",{ch:sendChannel,index:0});if(!r.failed){$("#workbench").open=false;$("#wrap").scrollIntoView({behavior:"smooth",block:"center"});}}else if(action==="back")await touch(1);else if(action==="environment")showSide("environment");else if(action==="rec-key"){await key(6,true);await key(6,false);}};
+
+/* ---------- 轮询 ---------- */
+function poll(force = false) {
+  if (inflight) return force ? pollPromise.then(() => poll(true)) : pollPromise;
+  inflight = true;
+  pollPromise = fetch("/api/state").then((r) => r.json()).then((s) => {
+    S = s;
+    $("#conn").textContent = "已连接"; $(".device").classList.remove("offline");
+    renderScreen(s.dev);
+    renderPanels(s);
+  }).catch(() => { $("#conn").textContent="连接断开"; $("#reviewState").textContent="连接断开 · 最后快照"; $(".device").classList.add("offline"); reviewFeedback("连接断开，请确认本地模拟服务还在运行。画面为最后一次快照。",true); })
+    .finally(() => { inflight = false; });
+  return pollPromise;
+}
+setInterval(() => poll(), 100);
+
+/* ---------- 输入 ---------- */
+const held = new Set();
+function press(k) { if (held.has(k)) return; held.add(k); markKey(k, true); key(k, true); }
+function release(k) { if (!held.has(k)) return; held.delete(k); markKey(k, false); key(k, false); }
+function markKey(k, on) { document.querySelectorAll(`.k[data-k="${k}"]`).forEach((el) => el.classList.toggle("down", on)); }
+
+document.querySelectorAll(".k").forEach((el) => {
+  const k = +el.dataset.k;
+  el.addEventListener("pointerdown", (ev) => { ev.preventDefault(); el.setPointerCapture(ev.pointerId); press(k); });
+  el.addEventListener("pointerup", () => release(k));
+  el.addEventListener("pointercancel", () => release(k));
+  el.addEventListener("keydown", ev=>{if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();ev.stopPropagation();if(!ev.repeat)press(k);}});
+  el.addEventListener("keyup", ev=>{if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();ev.stopPropagation();release(k);}});
+});
+const KB = { ArrowUp: 0, ArrowDown: 1, ArrowLeft: 2, ArrowRight: 3, Enter: 4, Escape: 5, Backspace: 5, r: 6, R: 6, p: 7, P: 7 };
+document.addEventListener("keydown", (ev) => {
+  if(ev.key==="Backspace"&&S?.dev.ui.keyboard&&!ev.target.closest("input,select,textarea")){ev.preventDefault();if(!ev.repeat)startBackspaceHold();return;}
+  if (ev.target.closest("input,select,textarea,button,[role=button],summary,a")) return;
+  if (ev.key in KB) { ev.preventDefault(); if (!ev.repeat) press(KB[ev.key]); }
+});
+document.addEventListener("keyup", (ev) => { if(ev.key==="Backspace"&&backspaceHold?.pointer===null){ev.preventDefault();stopBackspaceHold();return;} if (ev.key in KB) { ev.preventDefault(); release(KB[ev.key]); } });
+window.addEventListener("blur", () => [...held].forEach(release));
+/* 用完下拉框 / 按钮就把焦点还给设备，键盘才能继续操作设备 */
+document.addEventListener("change", (ev) => { if (ev.target.matches("select,input[type=range]")) ev.target.blur(); });
+document.addEventListener("click", (ev) => { const b = ev.target.closest("button"); if (b) b.blur(); });
+
+let lastTouch = 0;
+async function screenAction(t) {
+ if(t.getAttribute("aria-disabled")==="true") {reviewFeedback("该项当前不可用，请查看条目说明。",true);return;}
+ if(t.dataset.control!==undefined&&typeof controlAction==="function")await controlAction(t);
+ else if(t.dataset.uiChannel!==undefined)await uiAction("live_channel",{channel:+t.dataset.uiChannel});
+ else if(t.dataset.uiView!==undefined)await uiAction("live_view",{view:+t.dataset.uiView});
+ else if(t.dataset.uiPause!==undefined)await uiAction("live_pause",{paused:t.dataset.uiPause==="true"});
+ else if(t.dataset.uiFilter)await uiAction("filter_open");
+ else if(t.dataset.liveIndex!==undefined)await uiAction("live_detail",t.dataset.liveSeq!==undefined?{seq:Number(t.dataset.liveSeq)}:{index:+t.dataset.liveIndex});
+ else if(t.dataset.copyDetail)await copyDetailData();
+ else if(t.dataset.dlg!==undefined)await touch(2,+t.dataset.dlg);
+ else if(t.dataset.back)await touch(1);
+ else if(t.dataset.keyboardToken!==undefined)await touch(0,+t.dataset.item,{keyboard_token:Number(t.dataset.keyboardToken),generation:Number(t.dataset.keyboardGeneration)});
+ else if(t.dataset.planToken!==undefined)await touch(0,+t.dataset.item,{plan_token:Number(t.dataset.planToken),plan_name:t.dataset.planName,generation:Number(t.dataset.planGeneration)});
+ else if(t.dataset.item!==undefined)await touch(0,+t.dataset.item);
+}
+const SCREEN_ACTIONS="[data-control],[data-item],[data-back],[data-dlg],[data-live-index],[data-ui-channel],[data-ui-view],[data-ui-pause],[data-ui-filter],[data-copy-detail]";
+// Capture on the stable screen: every deletion can replace the child button.
+let backspaceHold=null;
+function stopBackspaceHold(){
+ const h=backspaceHold;if(!h)return;backspaceHold=null;clearInterval(h.timer);
+ const screen=$('#scr');if(h.pointer!==null&&screen.hasPointerCapture(h.pointer))screen.releasePointerCapture(h.pointer);
+ api('/api/local/backspace',{action:'end',token:h.token,generation:h.generation},{quiet:true});
+}
+function sendBackspaceBegin(h,first=false){
+ if(backspaceHold!==h||h.inflight)return;h.inflight=true;
+ api('/api/local/backspace',{action:'begin',token:h.token,generation:h.generation},{quiet:!first}).then(result=>{
+  h.inflight=false;if(backspaceHold!==h)return;
+  if(result.failed)stopBackspaceHold();else h.confirmed=true;
+ });
+}
+function startBackspaceHold(pointer=null){
+ const k=S?.dev.ui.keyboard;if(!k?.token)return;
+ stopBackspaceHold();
+ const h={token:k.token,generation:S.sim.generation,pointer,inflight:false,confirmed:false,timer:null};backspaceHold=h;
+ if(pointer!==null)$('#scr').setPointerCapture(pointer);
+ sendBackspaceBegin(h,true);h.timer=setInterval(()=>sendBackspaceBegin(h),250);
+}
+function syncBackspaceHold(d){
+ const h=backspaceHold;if(!h)return;const k=d.ui.keyboard;
+ if(!k||k.token!==h.token||S.sim.generation!==h.generation||!d.power.screen||d.power.locked||
+    (h.confirmed&&!k.backspace_holding))stopBackspaceHold();
+}
+$('#scr').addEventListener('pointerdown',ev=>{
+ const t=ev.target.closest(SCREEN_ACTIONS);if(!t)return;
+ if(t.dataset.backspace==='1'){
+  if(ev.button!==0)return;ev.preventDefault();lastTouch=performance.now();startBackspaceHold(ev.pointerId);return;
+ }
+ stopBackspaceHold();
+ if(!S?.dev.ui.keyboard&&performance.now()-lastTouch<180)return;
+ ev.preventDefault();lastTouch=performance.now();screenAction(t);
+});
+$('#scr').addEventListener('keydown',ev=>{
+ const t=ev.target.closest(SCREEN_ACTIONS);if(!t||!['Enter',' '].includes(ev.key))return;
+ ev.preventDefault();ev.stopPropagation();if(ev.repeat)return;
+ if(t.dataset.backspace==='1')startBackspaceHold();else {stopBackspaceHold();screenAction(t);}
+});
+$('#scr').addEventListener('keyup',ev=>{if(backspaceHold&&backspaceHold.pointer===null&&['Enter',' ','Backspace'].includes(ev.key)){ev.preventDefault();ev.stopPropagation();stopBackspaceHold();}});
+// The focused key is replaced on redraw, so its keyup may target the body.
+window.addEventListener('keyup',ev=>{if(backspaceHold?.pointer===null&&['Enter',' ','Backspace'].includes(ev.key)){ev.preventDefault();stopBackspaceHold();}},true);
+window.addEventListener('pointerup',ev=>{if(backspaceHold?.pointer===ev.pointerId)stopBackspaceHold();},true);
+window.addEventListener('pointercancel',ev=>{if(backspaceHold?.pointer===ev.pointerId)stopBackspaceHold();},true);
+$('#scr').addEventListener('lostpointercapture',ev=>{if(backspaceHold?.pointer===ev.pointerId)stopBackspaceHold();});
+window.addEventListener('blur',stopBackspaceHold);
+window.addEventListener('pagehide',stopBackspaceHold);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopBackspaceHold();});
+async function copyDetailData() {
+ const d=S?.dev.ui.detail; if(!d)return;
+ const text=(d.data||[]).map(n=>Number(n).toString(16).toUpperCase().padStart(2,"0")).join(" ");
+ try {await navigator.clipboard.writeText(text);reviewFeedback(`已复制 ${d.available_len} 字节${d.truncated?"（仅缓存中的部分数据）":""}。`);}
+ catch {reviewFeedback("浏览器未允许复制，可在右侧展开报文数据后选择复制。",true);}
+}
+
+$("#batt").addEventListener("change", (ev) => env("batt", +ev.target.value));
+$("#batt").addEventListener("input", (ev) => { $("#battv").textContent = ev.target.value + " mV"; });
+$("#ext").onclick = () => env("ext", S.env.ext ? 0 : 1);
+$("#sd").onclick = () => env(S.env.sd.present ? "sd_remove" : "sd_insert");
+$("#badcard").onclick = () => env("sd_werr", S.env.sd.werr === 2 ? 0 : 2);
+$("#frag").onclick = () => env("sd_frag", S.env.sd.frag ? 0 : 1);
+$("#wp").onclick = () => env("sd_wp", S.env.sd.wp ? 0 : 1);
+$("#unsup").onclick = () => env("sd_unsupported", S.env.sd.unsupported ? 0 : 1);
+$("#busy").onclick = () => env("sd_busy", S.env.sd.busy ? 0 : 1);
+$("#usb").onclick = () => env("usb", S.env.usb ? 0 : 1);
+$("#host").onclick = () => env("host", S.env.host ? 0 : 1);
+$("#chip").onchange = (ev) => env("chip", +ev.target.value);
+$("#screenConn").onclick = () => env("screen", S.env.screen ? 0 : 1);
+document.querySelectorAll("[data-env]").forEach((b) => b.onclick = () => env(b.dataset.env, +(b.dataset.a || 0), +(b.dataset.b || 0)));
+document.querySelectorAll("[data-host]").forEach((b) => b.onclick = () => host(b.dataset.host, +(b.dataset.a || 0), +(b.dataset.b || 0)));
+document.querySelectorAll("[data-speed]").forEach((b) => b.onclick = () => api("/api/sim", { speed: +b.dataset.speed }));
+$("#pause").onclick = () => api("/api/sim", { pause: !S.sim.paused });
+$("#step").onclick = () => api("/api/sim", {step:10});
+$("#reset").onclick = () => { if (confirm("重置模拟器？设备回到关机状态，环境恢复默认。")) api("/api/sim", { reset: true }); };
+
+/* 屏幕按比例缩放到容器宽度 */
+function fit() { const wrap=$("#wrap"),w=wrap.clientWidth; $("#scr").style.transform=`scale(${w/480})`; }
+window.addEventListener("resize", fit); new ResizeObserver(fit).observe($("#wrap")); fit();
+poll();
+</script>
+<script src="/workbench.js"></script>
+<script src="/controls.js"></script>
+<script src="/scroll.js"></script>
+</body>
+</html>
