@@ -542,7 +542,7 @@ static void go_home(void)
 static int file_count(void) { return port_sd_file_count(); }
 
 /* 按键模拟通道页的行布局：接口、按法、各键（没有键值表时一行提示）、手动、松开、学习、扫描、串联电阻。 */
-typedef struct { int keys0, nkeys, manual, release, learn, scan, series, total; } keych_rows_t;
+typedef struct { int keys0, nkeys, manual, release, learn, scan, series, table, total; } keych_rows_t;
 static keych_rows_t keych_rows(void)
 {
     const keysim_t *k = keysim_get();
@@ -555,7 +555,8 @@ static keych_rows_t keych_rows(void)
     r.learn = r.release + 1;
     r.scan = r.learn + 1;
     r.series = r.scan + 1;
-    r.total = r.series + 1;
+    r.table = r.series + 1;
+    r.total = r.table + 1;
     return r;
 }
 static bool live_row_at(unsigned channel,unsigned ordinal,disp_row_t *out,uint32_t *source_back)
@@ -1863,6 +1864,11 @@ static void key_keych(key_id_t k, gesture_t g)
     } else if (c == r.scan) {
         cursor[PG_KEYSCAN] = 0;
         go(PG_KEYSCAN);
+    } else if (c == r.table) {
+        if (keysim_resave())
+            show_toast("正在重新写入 SD 卡");
+        else if (ks->tables[ks->ch].valid && ks->sd_saved[ks->ch])
+            show_toast("这张键值表已经在 SD 卡上");
     } else if (c == r.series) {
         winsim_status_t rc = keysim_recalibrate();
         if (rc == WINSIM_OK) {
@@ -1895,7 +1901,7 @@ static void key_keylearn(key_id_t k, gesture_t g)
         show_toast("已清空，重新学习");
     } else if (c == 3 + n) {
         if (keysim_learn_save()) {
-            snprintf(t, sizeof t, "已保存 %d 个键值到 K%u", n, (unsigned)ks->ch + 1u);
+            snprintf(t, sizeof t, "已保存 %d 个键值到 K%u，正在写入 SD 卡", n, (unsigned)ks->ch + 1u);
             show_toast(t);
             cursor[PG_KEYCH] = 2;
             go(PG_KEYCH);
@@ -1925,7 +1931,7 @@ static void key_keyscan(key_id_t k, gesture_t g)
         }
     } else if (c == 2 + n) {
         if (keysim_scan_save()) {
-            snprintf(t, sizeof t, "已保存 %u 个键值到 K%u（每档取中点）",
+            snprintf(t, sizeof t, "已保存 %u 个键值到 K%u（每档取中点），正在写入 SD 卡",
                      (unsigned)ks->tables[ks->ch].n, (unsigned)ks->ch + 1u);
             show_toast(t);
             cursor[PG_KEYCH] = 2;
@@ -2949,7 +2955,8 @@ static void items_keysim(jw_t *j)
         const char *state = on ? (ks->pressed != -1 ? "按下中" : "已接通") : "断开";
         snprintf(l, sizeof l, "K%d", c + 1);
         if (t->valid)
-            snprintf(v, sizeof v, "%s · %s · %u 个键值", state, t->name, (unsigned)t->n);
+            snprintf(v, sizeof v, "%s · %s · %u 个键值 · %s", state, t->name, (unsigned)t->n,
+                     ks->sd_saved[c] ? "已存 SD" : "未存 SD");
         else
             snprintf(v, sizeof v, "%s · 未学习", state);
         item(j, l, v, on ? IF_ACTIVE : 0);
@@ -2999,6 +3006,18 @@ static void items_keych(jw_t *j)
     snprintf(v, sizeof v, "%.1f 欧（%s）· OK 重新标定", (double)ks->r_series[ks->ch],
              ks->calibrated[ks->ch] ? "已标定" : "未标定，用默认值");
     item(j, "串联电阻", v, ks->calibrated[ks->ch] ? IF_ACTION : IF_WARN);
+    int16_t err = ks->sd_error[ks->ch];
+    if (!t->valid)
+        item(j, "键值表", "还没有", IF_DISABLED);
+    else if (ks->sd_saved[ks->ch]) {
+        snprintf(v, sizeof v, "%s · 已存 SD 卡 APMKEY/K%u.TXT", t->name, (unsigned)ks->ch + 1u);
+        item(j, "键值表", v, 0);
+    } else if (err == KS_IO_ERR_UNAVAILABLE)
+        item(j, "键值表", "只在内存：SD 卡不可用，插卡后自动保存", IF_WARN);
+    else if (err)
+        item(j, "键值表", "写入 SD 卡失败 · OK 重试", IF_WARN);
+    else
+        item(j, "键值表", "正在写入 SD 卡", IF_ACTIVE);
     (void)r;
 }
 

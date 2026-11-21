@@ -7,6 +7,8 @@
 #include "services/player/play_sm.h"
 #include "services/power/power_sm.h"
 #include "services/storage/storage_sm.h"
+#include "services/keysim/keysim.h"
+#include "services/keysim/keysim_file.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -308,8 +310,53 @@ static struct {
     bool     fault[WINSIM_NUM_CH];
 } KS;
 
+/* 模拟 SD 卡上的 /APMKEY/K1.TXT … K4.TXT。设备断电重启不丢，格式化或重置模拟器才清空。 */
+static struct {
+    char     text[WINSIM_NUM_CH][KS_FILE_MAX_BYTES];
+    uint16_t len[WINSIM_NUM_CH];
+} KSF;
+
+static void ks_files_clear(void)
+{
+    memset(&KSF, 0, sizeof KSF);
+}
+
+/* 和板级存储所有者同样的约定：卡就绪且空闲时处理一个请求。 */
+static void ks_storage_tick(void)
+{
+    ks_io_request_t r;
+    if (!keysim_io_peek(&r))
+        return;
+    storage_state_t st = storage_get()->state;
+    if (st == ST_MOUNTING || st == ST_FORMATTING)
+        return;   /* 等一等 */
+    if (!E.sd_present || E.msc || st != ST_READY) {
+        keysim_io_complete(r.id, KS_IO_ERR_UNAVAILABLE);
+        return;
+    }
+    if (r.kind == KS_IO_SAVE) {
+        size_t len = 0u;
+        if (E.sd_wp) {
+            keysim_io_complete(r.id, KS_IO_ERR_IO);
+            return;
+        }
+        int rc = ks_table_encode(&r.table, r.ch, KSF.text[r.ch], sizeof KSF.text[r.ch], &len);
+        if (rc == KS_FILE_OK)
+            KSF.len[r.ch] = (uint16_t)len;
+        keysim_io_complete(r.id, rc);
+    } else {
+        for (uint8_t ch = 0; ch < WINSIM_NUM_CH; ch++) {
+            ks_table_t t;
+            if (KSF.len[ch] && ks_table_decode(KSF.text[ch], KSF.len[ch], &t) == KS_FILE_OK)
+                keysim_table_loaded(ch, &t);
+        }
+        keysim_io_complete(r.id, 0);
+    }
+}
+
 static void ks_reset(void)
 {
+    ks_files_clear();
     memset(&KS, 0, sizeof KS);
     KS.apm_awake = true;
     for (unsigned k = 0; k < WINSIM_NUM_CH; k++)
@@ -409,6 +456,7 @@ static void ks_json(jw_t *j)
         jw_kbool(j, "fault", KS.fault[k]);
         jw_kint(j, "port_mv", (int64_t)(ks_port_mv(k) + 0.5f));
         jw_kint(j, "state", port_keysim_apm_state((uint8_t)k));
+        jw_kbool(j, "sd_file", KSF.len[k] != 0u);
         jw_end_obj(j);
     }
     jw_end_arr(j);
@@ -1103,6 +1151,7 @@ static void sd_tick(void)
     }
     if (E.format_due && (int32_t)(t - E.format_due) >= 0) {
         E.format_due = 0;
+        ks_files_clear();
         E.nfiles = 0;
         memset(E.file_session,0,sizeof E.file_session);
         E.sd_used = 0;
@@ -1119,6 +1168,7 @@ void env_tick(uint32_t ms)
     E.rtc_elapsed_ms += ms;
     if (!E.powered)
         return;
+    ks_storage_tick();
     for (int ch = 0; ch < CH_NUM; ch++)
         bus_tick(ch, ms);
     sd_tick();

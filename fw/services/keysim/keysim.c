@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 #include "services/keysim/keysim.h"
 #include "services/core/port.h"
+#include "services/storage/storage_sm.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -52,6 +53,10 @@ bool            keysim_learn_save(void) { return false; }
 winsim_status_t keysim_scan_start(void) { return WINSIM_ERR_PARAM; }
 void            keysim_scan_stop(void) {}
 bool            keysim_scan_save(void) { return false; }
+bool            keysim_io_peek(ks_io_request_t *out) { (void)out; return false; }
+void            keysim_io_complete(uint32_t id, int result) { (void)id; (void)result; }
+void            keysim_table_loaded(uint8_t ch, const ks_table_t *table) { (void)ch; (void)table; }
+bool            keysim_resave(void) { return false; }
 
 #else
 
@@ -65,6 +70,11 @@ static winsim_ctx_t   ws;            /* 约 33 KB */
 static winsim_learn_t learner;
 static keysim_t       K;
 static uint32_t       idle_t, learn_t, tap_t, scan_t;
+static uint8_t        save_pending;                 /* 每路一位 */
+static uint16_t       save_gen[WINSIM_NUM_CH];
+static bool           load_pending;
+static uint16_t       load_gen;
+static bool           storage_was_ready;
 static bool           scan_waiting;
 static int16_t        scan_prev;
 static uint16_t       scan_prev_mv;
@@ -118,6 +128,9 @@ void keysim_init(void)
     K.manual_mv = 2500u;
     idle_t = learn_t = tap_t = scan_t = 0u;
     scan_waiting = false;
+    save_pending = 0u;
+    load_pending = false;
+    storage_was_ready = false;
     if (!port_keysim_hal(&hal) || winsim_init(&ws, &hal, NULL) != WINSIM_OK)
         return;
     K.available = true;
@@ -254,6 +267,93 @@ winsim_status_t keysim_clear_ovp(void)
     return rc;
 }
 
+/* ------------------------------------------------------------------ SD 卡 */
+
+static void request_save(uint8_t ch)
+{
+    save_pending = (uint8_t)(save_pending | (1u << ch));
+    save_gen[ch]++;
+    K.sd_saved[ch] = false;
+    K.sd_error[ch] = 0;
+}
+
+bool keysim_io_peek(ks_io_request_t *out)
+{
+    if (!K.available || !out)
+        return false;
+    memset(out, 0, sizeof *out);
+    if (load_pending) {
+        out->id = 0x80000000u | load_gen;
+        out->kind = KS_IO_LOAD;
+        return true;
+    }
+    for (uint8_t ch = 0; ch < WINSIM_NUM_CH; ch++) {
+        if (save_pending & (1u << ch)) {
+            out->id = ((uint32_t)ch << 16) | save_gen[ch];
+            out->kind = KS_IO_SAVE;
+            out->ch = ch;
+            out->table = K.tables[ch];
+            return true;
+        }
+    }
+    return false;
+}
+
+void keysim_io_complete(uint32_t id, int result)
+{
+    if (!K.available)
+        return;
+    if (id & 0x80000000u) {
+        if ((uint16_t)id != load_gen || !load_pending)
+            return;
+        load_pending = false;
+        K.sd_loaded = result == 0;
+        return;
+    }
+    uint8_t ch = (uint8_t)(id >> 16);
+    if (ch >= WINSIM_NUM_CH || !(save_pending & (1u << ch)) || (uint16_t)id != save_gen[ch])
+        return;   /* 期间又改了表：新的请求还在排队 */
+    save_pending = (uint8_t)(save_pending & ~(1u << ch));
+    K.sd_saved[ch] = result == 0;
+    K.sd_error[ch] = (int16_t)(result == 0 ? 0 : result);
+}
+
+void keysim_table_loaded(uint8_t ch, const ks_table_t *table)
+{
+    if (!K.available || ch >= WINSIM_NUM_CH || !table || !table->valid)
+        return;
+    if ((save_pending & (1u << ch)) || (K.tables[ch].valid && !K.sd_saved[ch]))
+        return;   /* 内存里的表更新，等它写盘 */
+    K.tables[ch] = *table;
+    K.sd_saved[ch] = true;
+    K.sd_error[ch] = 0;
+}
+
+bool keysim_resave(void)
+{
+    if (!K.available || !K.tables[K.ch].valid || K.sd_saved[K.ch])
+        return false;
+    request_save(K.ch);
+    return true;
+}
+
+/* SD 卡每次变成就绪：读一遍 /APMKEY，并把还没存上的表重新排队。 */
+static void storage_watch(void)
+{
+    bool ready = storage_get()->state == ST_READY;
+    if (ready && !storage_was_ready) {
+        load_pending = true;
+        load_gen++;
+        K.sd_loaded = false;
+        for (uint8_t ch = 0; ch < WINSIM_NUM_CH; ch++)
+            if (K.tables[ch].valid && !K.sd_saved[ch] && !(save_pending & (1u << ch)))
+                request_save(ch);
+    }
+    if (!ready && storage_was_ready)
+        K.sd_loaded = false;
+    storage_was_ready = ready;
+}
+
 /* ------------------------------------------------------------------ 学习 */
 
 winsim_status_t keysim_learn_start(void)
@@ -317,6 +417,7 @@ bool keysim_learn_save(void)
     memcpy(t->keys, K.learn_keys, sizeof t->keys);
     K.learn_n = 0u;
     keysim_learn_stop();
+    request_save(K.ch);
     return true;
 }
 
@@ -331,9 +432,11 @@ static void learn_poll(void)
     }
     if (winsim_learn_feed(&learner, mv, LEARN_POLL_MS, &cap)) {
         bool dup = false;
-        for (unsigned i = 0; i < K.learn_n; i++)
-            if ((K.learn_keys[i].mv > cap ? K.learn_keys[i].mv - cap : cap - K.learn_keys[i].mv) < 60u)
+        for (unsigned i = 0; i < K.learn_n; i++) {
+            unsigned have = K.learn_keys[i].mv, d = have > cap ? have - cap : (unsigned)cap - have;
+            if (d < 60u)
                 dup = true;
+        }
         if (!dup && K.learn_n < KS_MAX_KEYS) {
             ks_key_t *k = &K.learn_keys[K.learn_n];
             copy_name(k->name, sizeof k->name, k_key_names[K.learn_n < 4u ? K.learn_n : KEY_NAME_N - 1]);
@@ -445,6 +548,7 @@ bool keysim_scan_save(void)
         k->ohm = NAN;
     }
     K.scan_done = false;
+    request_save(K.ch);
     return true;
 }
 
@@ -454,6 +558,7 @@ void keysim_tick(uint32_t ms)
 {
     if (!K.available)
         return;
+    storage_watch();
     switch (K.activity) {
     case KS_PRESSING:
         if (K.press_mode == KS_TAP && K.pressed >= 0) {

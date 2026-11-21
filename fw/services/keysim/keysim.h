@@ -4,11 +4,13 @@
  *   - 选通道（自动标定串联电阻）、按键（点按 / 保持）、手动电压、全部松开；
  *   - 学习：电阻阵保持高阻，每 50 ms 测一次接口电压，喂给 winsim_learn_feed()；
  *   - 扫描：从 4800 mV 每 50 mV 往下设，每档停 30 ms 后读 APM 上报的开关状态，记下门限；
- *   - 空闲时每 300 ms 测一次接口电压，用来显示 APM 是否上电、检测过压。
+ *   - 空闲时每 300 ms 测一次接口电压，用来显示 APM 是否上电、检测过压；
+ *   - 键值表存 SD 卡 /APMKEY/K1.TXT … K4.TXT（格式见 keysim_file.h）：保存时排一个写请求，
+ *     SD 卡每次就绪时排一个读请求；由存储所有者（板级 storage_files.inc、模拟器 env_sim.c）在
+ *     卡空闲时执行，和发送方案的存储方式相同。
  *
  * 板上没有第 12 页硬件时（当前的 Rev D/E 目标），服务编译成空壳：不分配约 33 KB 的驱动上下文，
- * keysim_available() 返回 false，界面不显示入口。定义 CANFD_WINSIM_HW 可在目标板上启用。
- * 键值表目前只保存在 RAM 里，重启后丢失；保存到 SD 卡待定。 */
+ * keysim_available() 返回 false，界面不显示入口，也不会产生 SD 请求。定义 CANFD_WINSIM_HW 可在目标板上启用。 */
 #ifndef KEYSIM_H
 #define KEYSIM_H
 
@@ -74,7 +76,31 @@ typedef struct {
     ks_edge_t       scan_edges[KS_MAX_EDGES];
     /* 每路的键值表 */
     ks_table_t      tables[WINSIM_NUM_CH];
+    /* SD 卡 */
+    bool            sd_saved[WINSIM_NUM_CH];   /* 当前键值表已经写到 SD 卡 */
+    int16_t         sd_error[WINSIM_NUM_CH];   /* 最近一次保存失败的原因，0 = 没有 */
+    bool            sd_loaded;                 /* 这次插卡后已经读过 /APMKEY */
 } keysim_t;
+
+/* ---- SD 卡存储：由存储所有者在卡空闲时调用 ---- */
+typedef enum { KS_IO_NONE, KS_IO_SAVE, KS_IO_LOAD } ks_io_kind_t;
+#define KS_IO_ERR_UNAVAILABLE (-100)   /* SD 卡不在、没挂载或处于 U 盘模式 */
+#define KS_IO_ERR_IO          (-101)   /* 读写失败或写保护 */
+typedef struct {
+    uint32_t   id;
+    uint8_t    kind;                   /* ks_io_kind_t */
+    uint8_t    ch;                     /* SAVE：0–3 */
+    ks_table_t table;                  /* SAVE：要写的表（请求时的快照） */
+} ks_io_request_t;
+
+/* 有待处理的请求时复制一份并返回 true。读请求优先。 */
+bool keysim_io_peek(ks_io_request_t *out);
+/* 处理完成。result 为 0 或 KS_FILE_* / KS_IO_ERR_*。id 过期（期间又改了表）时忽略。 */
+void keysim_io_complete(uint32_t id, int result);
+/* 读请求里每读到一个有效文件调用一次。这一路有还没写盘的新表时不覆盖。 */
+void keysim_table_loaded(uint8_t ch, const ks_table_t *table);
+/* 重新写一次还没存上的表（界面里“键值表”一行的 OK）。 */
+bool keysim_resave(void);
 
 void            keysim_init(void);
 void            keysim_tick(uint32_t ms);

@@ -5,6 +5,7 @@
 #include "app/ui/core/ui_sm.h"
 #include "services/core/app_evt.h"
 #include "services/keysim/keysim.h"
+#include "services/keysim/keysim_file.h"
 #include "services/power/power_sm.h"
 #include "services/storage/storage_sm.h"
 #include "sim/env_sim.h"
@@ -258,6 +259,87 @@ static void leaves_release(void)
     CHECK(ui_page() == PG_HOME && keysim_get()->pressed == -1 && keysim_get()->activity == KS_IDLE);
 }
 
+static void power_cycle(void)
+{
+    sim_key(KEY_POWER, 1);                      /* 长按 2 s 关机 */
+    run(2300);
+    sim_key(KEY_POWER, 0);
+    run(3000);
+    CHECK(!power_running());
+    sim_key(KEY_POWER, 1);                      /* 再开机 */
+    run(1200);
+    sim_key(KEY_POWER, 0);
+    run(1500);
+    CHECK(power_running() && storage_get()->state == ST_READY);
+}
+
+static void learn_positions(int ch, int count)
+{
+    tap("学习键值");
+    tap("学习");
+    for (int pos = 1; pos <= count; pos++) {
+        env_cmd("ks_switch", ch, pos);
+        run(900);
+        env_cmd("ks_switch", ch, 0);
+        run(300);
+    }
+    tap("保存");
+    CHECK(ui_page() == PG_KEYCH && toast_has("正在写入 SD 卡"));
+}
+
+static void sd_persistence(void)
+{
+    home_entry_and_overview();
+    tap("K2");
+    learn_positions(1, 2);
+    run(50);
+    CHECK(keysim_get()->sd_saved[1] && keysim_get()->sd_error[1] == 0);
+    CHECK(has("已存 SD 卡 APMKEY/K2.TXT"));
+    back();
+    CHECK(has("K2\",\"v\":\"已接通 · 学习 · K2 · 2 个键值 · 已存 SD"));
+
+    /* 断电重启：开机挂载 SD 后自动读回 */
+    power_cycle();
+    run(100);
+    CHECK(keysim_get()->sd_loaded);
+    CHECK(keysim_get()->tables[1].valid && keysim_get()->tables[1].n == 2u && keysim_get()->sd_saved[1]);
+    CHECK(!strcmp(keysim_get()->tables[1].keys[0].name, "上升") && udiff(keysim_get()->tables[1].keys[0].mv, 3485u) < 40u);
+    CHECK(!keysim_get()->tables[0].valid && !keysim_get()->tables[2].valid);
+
+    /* 拔掉 SD 卡时学习：只在内存，插卡后自动补存 */
+    CHECK(ui_review_navigate(PG_KEYSIM) == 0);
+    env_cmd("sd_remove", 0, 0);
+    run(300);
+    tap("K3");
+    learn_positions(2, 3);
+    run(100);
+    CHECK(!keysim_get()->sd_saved[2] && keysim_get()->sd_error[2] == KS_IO_ERR_UNAVAILABLE);
+    CHECK(has("只在内存：SD 卡不可用，插卡后自动保存"));
+    env_cmd("sd_insert", 0, 0);
+    run(1500);
+    CHECK(storage_get()->state == ST_READY && keysim_get()->sd_saved[2]);
+    CHECK(keysim_get()->tables[1].valid && keysim_get()->sd_saved[1]);   /* 读回时 K2 仍在 */
+
+    /* 写保护：保存失败，界面可以重试 */
+    env_cmd("sd_wp", 1, 0);
+    learn_positions(2, 1);
+    run(100);
+    CHECK(!keysim_get()->sd_saved[2] && keysim_get()->sd_error[2] == KS_IO_ERR_IO);
+    CHECK(has("写入 SD 卡失败 · OK 重试"));
+    env_cmd("sd_wp", 0, 0);
+    tap("键值表");
+    CHECK(toast_has("正在重新写入 SD 卡"));
+    run(50);
+    CHECK(keysim_get()->sd_saved[2] && keysim_get()->tables[2].n == 1u);
+    tap("键值表");
+    CHECK(toast_has("已经在 SD 卡上"));
+
+    /* 换一个空白模拟器（相当于换了张空卡）：什么都读不到 */
+    boot();
+    run(100);
+    CHECK(keysim_get()->sd_loaded && !keysim_get()->tables[1].valid && !keysim_get()->tables[2].valid);
+}
+
 int main(void)
 {
     home_entry_and_overview();
@@ -266,6 +348,7 @@ int main(void)
     scan_without_state_source();
     overvoltage();
     leaves_release();
+    sd_persistence();
     printf("Key simulation UI: %u checks passed (simulated APM, not hardware)\n", checks);
     return 0;
 }

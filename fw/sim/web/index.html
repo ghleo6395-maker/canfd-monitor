@@ -714,7 +714,7 @@ function renderKeysimBench(ks) {
     setOn(`#ksAtt${i}`, c.attached); $(`#ksAtt${i}`).textContent = c.attached ? "原车开关已接" : "原车开关已断开";
     KS_POS.forEach((_, p) => { const b = $(`#ksPos${i}_${p}`); b.classList.toggle("on", c.attached && c.pos === p); b.disabled = !c.attached; });
     setOn(`#ksFault${i}`, c.fault);
-    $(`#ksInfo${i}`).textContent = `${(c.port_mv / 1000).toFixed(2)} V · ${c.state >= 0 ? (KS_STATE[c.state] || "状态 " + c.state) : "无状态报文"}`;
+    $(`#ksInfo${i}`).textContent = `${(c.port_mv / 1000).toFixed(2)} V · ${c.state >= 0 ? (KS_STATE[c.state] || "状态 " + c.state) : "无状态报文"}${c.sd_file ? ` · SD 有 K${i + 1}.TXT` : ""}`;
   });
 }
 let busesBuilt = false;
