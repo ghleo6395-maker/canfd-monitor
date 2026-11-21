@@ -79,5 +79,5 @@ make -C fw winsim-example
 
 - **已验证：** 主机上 13 组测试共 1241 项检查全部通过，在 ASan/UBSan 下运行。`make -C fw test lib` 的其余测试也全部通过。示例扫描还原出了仿真 APM 设定的 5 个门限。
 - **精度（仿真）：** 0–4600 mV 每 200 mV 一个测试点，最差误差 20 mV。换成 20 组 1% 误差的电阻、导通电阻偏离模型 2 Ω 时，最差仍是 20 mV。
-- **ARM 编译：** 只用 clang 以 `thumbv7em-none-eabihf`、Cortex-M7 硬浮点和 `-Wall -Wextra -Werror` 检查过编译。没有用 arm-none-eabi-gcc 跑过 `make -f Makefile.arm BOARD=reve check`。
+- **ARM 编译：** 用 Arm GNU Toolchain 15.2.Rel1 跑 `make -C fw -f Makefile.arm BOARD=reve check` 通过，两个文件都没有告警。目前没有调用方，链接后不留任何 winsim 符号，BIN 和 main 分支逐字节相同（SHA256 `e1178da6…`）。函数栈帧最大 160 B（`winsim_init`）。
 - **未验证：** STM32 平台回调、实板 I2C 和 ADC、与 APM 的联调。
