@@ -1,14 +1,16 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * Hardware-C 第 12 页的硬件适配：把 winsim_hal_t 映射到 TCA9539 + PG2 + PC2_C。
+ * Hardware-C 第 12 页第 2 版的硬件适配：把 winsim_hal_t 映射到 TCA9539 + PG2 + PC2_C。
  *
  *   U801 TCA9539 @ 0x74（A0 = A1 = GND），I2C4：PD12 = SCL，PD13 = SDA
- *   P00–P07 → 电阻阵 bit0–bit7     （输出寄存器 0x02）
- *   P10–P13 → 电阻阵 bit8–bit11    （输出寄存器 0x03 低 4 位）
- *   P14     → 0 Ω 直通 Q807        （0x03 bit4）
- *   P15–P17 → 未用，设为输出低
- *   RESET   ← PG2（WS_RST_N），R814 下拉；低 = 复位，全部引脚变输入，MOS 由 100 kΩ 下拉关断
- *   ADC     ← PC2_C（WS_ADC），R815/R816 = 300k/100k，折算系数 4
+ *   P00–P07 → 电阻阵 b0–b7          （输出寄存器 0x02）
+ *   P10–P13 → 电阻阵 b8–b11         （输出寄存器 0x03 bit0–3）
+ *   P14     → 0 Ω 直通 Q807         （0x03 bit4）
+ *   P15     → 电阻阵 b12（100 Ω）   （0x03 bit5）
+ *   P16/P17 → 通道地址 CH_A0/CH_A1  （0x03 bit6–7，K1–K4 = 0–3）
+ *   RESET   ← PG2（WS_RST_N），R814 下拉；低 = 复位，全部引脚变输入，MOS 由 100 kΩ 下拉关断；
+ *             PG2 同时经 Q808B 反相成 CH_EN_N，低时 4 路继电器全断、回读开关关闭
+ *   ADC     ← PC2_C（WS_ADC），所选通道 R815–R818 之一 / R819 = 300k/100k，折算系数 4
  *
  * set_oe(false) 拉低 PG2；set_oe(true) 释放复位后，先写输出寄存器再设为输出方向。
  * 芯片复位后输出寄存器默认 0xFF，顺序反了会让全部 MOS 瞬间导通。
@@ -28,6 +30,9 @@
 #define WINSIM_TCA9539_REG_OUT 0x02u   /* Output Port 0；0x03 = Port 1 */
 #define WINSIM_TCA9539_REG_CFG 0x06u   /* Configuration 0；0x07 = Port 1，0 = 输出 */
 #define WINSIM_TCA9539_P1_SHORT 0x10u  /* P14 */
+#define WINSIM_TCA9539_P1_B12   0x20u  /* P15 */
+#define WINSIM_TCA9539_P1_CH_SHIFT 6u  /* P16/P17 */
+#define WINSIM_TCA9539_P1_CH_MASK  0xC0u
 
 typedef struct {
     /* 从 reg 开始连续写 len 字节（芯片自动递增），收到 ACK 返回 true。 */

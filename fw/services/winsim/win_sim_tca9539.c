@@ -3,7 +3,8 @@
 
 #include <stddef.h>
 
-#define P1_MASK_BITS 0x0Fu   /* P10–P13 = bit8–bit11 */
+#define P1_MASK_BITS 0x0Fu   /* P10–P13 = b8–b11 */
+#define P1_KEEP_ON_WRITE (WINSIM_TCA9539_P1_SHORT | WINSIM_TCA9539_P1_CH_MASK)
 
 static struct {
     winsim_tca9539_port_t port;
@@ -44,7 +45,8 @@ static bool wr(uint8_t reg, const uint8_t *data, uint8_t len)
 static void tca_shift_write(uint16_t mask)
 {
     s_tca.out[0] = (uint8_t)(mask & 0xFFu);
-    s_tca.out[1] = (uint8_t)((s_tca.out[1] & WINSIM_TCA9539_P1_SHORT) | ((mask >> 8) & P1_MASK_BITS));
+    s_tca.out[1] = (uint8_t)((s_tca.out[1] & P1_KEEP_ON_WRITE) | ((mask >> 8) & P1_MASK_BITS) |
+                             ((mask & 0x1000u) ? WINSIM_TCA9539_P1_B12 : 0u));
     if (s_tca.enabled && !wr(WINSIM_TCA9539_REG_OUT, s_tca.out, 2u))
         force_off();
 }
@@ -55,6 +57,14 @@ static void tca_set_short_0r(bool enable)
         s_tca.out[1] = (uint8_t)(s_tca.out[1] | WINSIM_TCA9539_P1_SHORT);
     else
         s_tca.out[1] = (uint8_t)(s_tca.out[1] & ~WINSIM_TCA9539_P1_SHORT);
+    if (s_tca.enabled && !wr((uint8_t)(WINSIM_TCA9539_REG_OUT + 1u), &s_tca.out[1], 1u))
+        force_off();
+}
+
+static void tca_select_channel(uint8_t ch)
+{
+    s_tca.out[1] = (uint8_t)((s_tca.out[1] & (uint8_t)~WINSIM_TCA9539_P1_CH_MASK) |
+                             ((uint8_t)(ch & 3u) << WINSIM_TCA9539_P1_CH_SHIFT));
     if (s_tca.enabled && !wr((uint8_t)(WINSIM_TCA9539_REG_OUT + 1u), &s_tca.out[1], 1u))
         force_off();
 }
@@ -110,6 +120,7 @@ bool winsim_tca9539_bind(const winsim_tca9539_port_t *port, winsim_hal_t *hal_ou
     hal_out->set_short_0r = tca_set_short_0r;
     hal_out->adc_read_mv = tca_adc_read_mv;
     hal_out->delay_ms = tca_delay_ms;
+    hal_out->select_channel = tca_select_channel;
     return true;
 }
 

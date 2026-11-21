@@ -1,31 +1,34 @@
 # win_sim：车窗开关模拟器驱动
 
-APM 售后测试扩展模块。监控器在 APM 的车窗开关输入上模拟按键电阻，同时用 CAN 读回 APM 识别出的开关状态，用来测出各档位的电压门限。驱动按 APM 车窗开关模拟规范（apm.md）实现，并针对 Hardware-C 新增的第 12 页电路做了调整。C99，不用动态内存，裸机和 RTOS 都能用。
+APM 售后测试扩展模块。监控器在 APM 的车窗开关输入上模拟按键电阻，同时用 CAN 读回 APM 识别出的开关状态，用来测出各档位的电压门限。没有键值表时，也可以并在原车开关上被动学习每个档位。驱动按 APM 车窗开关模拟规范（apm.md）实现，并针对 Hardware-C 新增的第 12 页第 2 版电路做了调整。C99，不用动态内存，裸机和 RTOS 都能用。
 
 **硬件状态：第 12 页还只是提案。** 它尚未加入仓库里 11 页的 `Hardware-C-schematic.pdf`，现有固件也还没有移植到 Hardware-C。因此本目录只提供与平台无关的驱动和主机测试，没有接入 `platform/` 和主循环。
 
-## 第 12 页电路
+## 第 12 页第 2 版电路
+
+4 路接口 K1–K4 共用一套 13 位电阻阵，同一时刻只接通一路。
 
 | 功能 | 器件和引脚 |
 | --- | --- |
 | I/O 扩展 | U801 TCA9539PWR，地址 0x74（A0 = A1 = GND），挂在 I2C4（PD12 SCL / PD13 SDA），与 U111 TUSB320、J302 共用总线 |
-| 复位 | PG2 = WS_RST_N，经 R814 10 kΩ 下拉。低电平时全部引脚为输入，MOS 由 100 kΩ 下拉关断 |
-| 电阻阵 | R801–R812 = 200、390、820、1.6k、3.3k、6.2k、13k、24k、47k、91k、180k、360k Ω（1%），由 Q801–Q806 BSS138DW 开关；P00–P07 对应 bit0–7，P10–P13 对应 bit8–11 |
-| 0 Ω 直通 | Q807 AO3400A，由 P14 控制；P15–P17 未用，设为输出低 |
-| 保护 | F801 50 mA PTC，D801 SMF15CA |
-| 回读 | PC2_C = WS_ADC，R815/R816 = 300k/100k（0.1%）分压 1:4，取在 PTC 外侧；C802 10 nF |
-| 接口 | J801 KF2EDGR-3.81-2P |
+| 复位和使能 | PG2 = WS_RST_N，经 R814 10 kΩ 下拉。PG2 低时 U801 复位、电阻阵全关；同时经 Q808B 反相成 CH_EN_N，4 路继电器全断 |
+| 电阻阵 | b0–b11 = R801–R812（200、390、820、1.6k、3.3k、6.2k、13k、24k、47k、91k、180k、360k Ω），b12 = R831（100 Ω），1%；Q801–Q806、Q808A BSS138DW |
+| 0 Ω 直通 | Q807 AO3400A，由 P14 控制 |
+| 通道选择 | P16/P17 = CH_A0/CH_A1 → U806 SN74LVC139A 译码 → U802–U805 TLP176AM 光耦继电器 |
+| 每路保护 | F801–F804 50 mA PTC，D801–D804 SMF15CA |
+| 回读 | 每路接口侧 300 kΩ（R815–R818）→ U807 CD74HC4052 选通 → R819 100 kΩ + C802 10 nF → PC2_C = WS_ADC |
+| 接口 | J801 KF2EDGR-3.81-8P，奇数脚 K1–K4，偶数脚 GND |
 
-`win_sim_tca9539.h` 的注释里有完整的位映射和上电顺序。
+位映射和上电顺序见 `win_sim_tca9539.h` 的注释。
 
 ## 文件
 
 | 文件 | 内容 |
 | --- | --- |
-| `win_sim.h` / `win_sim.c` | 核心驱动：查找表、控制字求解、中值回读、过压锁定、自动扫描 |
+| `win_sim.h` / `win_sim.c` | 核心驱动：查找表、控制字求解、通道选择、串联电阻标定、被动测量、按键学习、中值回读、过压锁定、自动扫描 |
 | `win_sim_tca9539.h` / `.c` | 第 12 页硬件适配：HAL 到 TCA9539 寄存器、PG2 复位、PC2_C 折算 |
-| `../../examples/winsim/win_sim_can_example.c` | 集成示例：CAN 唤醒 → 探测空载电压 → 4800→0 mV 扫描 → 打印电压与开关状态对应表 |
-| `../../tests/test_win_sim.c` | 主机单元测试，Mock HAL 按物理模型仿真 APM 输入和 TCA9539 寄存器 |
+| `../../examples/winsim/win_sim_can_example.c` | 集成示例：CAN 唤醒 → 选通道并标定 → 探测空载电压 → 4800→0 mV 扫描 → 打印电压与开关状态对应表 |
+| `../../tests/test_win_sim.c` | 主机单元测试，Mock HAL 按物理模型仿真每一路 APM 输入和 TCA9539 寄存器 |
 
 ## 运行
 
@@ -38,19 +41,53 @@ make -C fw winsim-example
 
 `make -C fw test` 也会运行 `test_win_sim`。`services/winsim/*.c` 由 `services/*/*.c` 通配编进主机测试、模拟器动态库和 ARM 固件。ARM 固件里目前没有调用方，`--gc-sections` 会把它们丢掉。示例依赖集成方实现的 CAN 回调，所以放在 `fw/examples/winsim/`，不放在 `services/` 下。`run_ui_host.py` 和 `generate_ui_font.py` 会递归扫描 `services/` 下的全部 `.c`。
 
+## 用法
+
+```c
+static winsim_ctx_t ws;                       // 约 33 KB，放静态区
+winsim_init(&ws, &hal, NULL);
+
+// 切到 K2 并标定这一路的 PTC + 继电器串联电阻（会短暂接通 0 Ω 直通）
+float r_series;
+winsim_select_channel(&ws, 1, true, &r_series);
+
+// 模拟按键：按目标电压或阻值
+winsim_state_t st;
+winsim_set_voltage(&ws, 3480, &st);
+winsim_set_hiz(&ws);                          // 松开
+
+// 被动学习：原车开关并在这一路，电阻阵保持高阻
+winsim_learn_t l;
+uint16_t idle, mv, key_mv;
+winsim_probe_open_voltage(&ws, &idle);        // 开关松开时
+winsim_learn_begin(&l, &ws.cfg, idle);
+for (;;) {                                    // 每 50 ms 一次
+    winsim_measure(&ws, &mv);
+    if (winsim_learn_feed(&l, mv, 50, &key_mv))
+        save_key(key_mv, winsim_equiv_ohm(&ws, key_mv));
+}
+```
+
+- **换通道**：`winsim_select_channel()` 先把电阻阵切到高阻，再改通道地址，等 `channel_switch_ms`（默认 5 ms，TLP176AM 接通最长 3 ms）。换通道会清掉空载电压，下次设置时重新探测。
+- **串联电阻**：每路串联 PTC 和继电器，约 5–17 Ω，驱动事先不知道。标定方法是先在高阻下测空载电压，再接通直通测一次，扣掉直通管和 400 kΩ 回读负载后得到这一路的值。PTC 断开时返回 `WINSIM_ERR_CALIBRATION`，保留原值。
+- **0 mV**：受串联电阻限制，直通时接口约 11–39 mV，仍远低于 APM 的对地短路门限。
+- **过压锁定**不随换通道解除。换到正常的通道后调用 `winsim_clear_ovp()` 重新检测。
+- **学习规则**：低于空闲电压 150 mV 算按下，相邻采样差 ≤ 25 mV 持续 500 ms 后记录一档（取稳定段平均值），之后要回到空闲附近才能学下一档。三个参数都在 `winsim_cfg_t` 里。
+
 ## 与 apm.md 的差异
 
 | apm.md | 本实现 | 原因 |
 | --- | --- | --- |
-| 8 位电阻阵，`uint8_t mask`，`r_lut[256]` | 12 位，`uint16_t mask`，`r_lut[4096]`（16 KB） | 8 位达不到规范要求的 25 mV 精度（24 个测试点有 11 个超差） |
+| 8 位电阻阵，`uint8_t mask`，`r_lut[256]` | 13 位，`uint16_t mask`，`r_lut[8192]`（32 KB） | 8 位达不到 25 mV 精度；每路串联电阻约 5–17 Ω，12 位到不了 200 mV，所以在低阻端加了 b12 = 100 Ω |
+| 1 路 | 4 路共用电阻阵，`select_channel()` 加进 HAL | 同一时刻只按一路，复用一套电阻阵；译码器保证不会同时接通两路 |
 | 74HCT595，`/OE` 上拉 | TCA9539，RESET 下拉到 PG2 | 主控只剩 PG2、PC2_C 两个空闲脚；HAL 名称不变，映射见 `win_sim_tca9539.h` |
-| 回读 1:1，负载 200 kΩ | 1:4，负载 400 kΩ，取在 PTC 外侧 | 误接 12 V 时 ADC 脚不超过 3.3 V |
-| `winsim_state_t.mask_595` | `mask`，另加 `target_mv` | 控制字不再来自 595；回调里需要知道目标值 |
-| 扫描中按目标值校验 | 扫描中按理论值校验 | 0–220 mV 之间没有档位，按目标值校验会在 50/100/150 mV 误报 |
-| — | `r_series_ohm`、`short_rds_on_ohm`、`r_bit_ohm[]` 可配置 | 填入实测值可以提高精度 |
+| 回读 1:1，负载 200 kΩ | 1:4，负载 400 kΩ，取在各路接口侧 | 误接 12 V 时 ADC 脚不超过 3.3 V；接口侧回读才能被动学习 |
+| `winsim_state_t.mask_595` | `mask`，另加 `channel`、`target_mv` | 控制字不再来自 595；回调里需要知道通道和目标值 |
+| 扫描中按目标值校验 | 扫描中按理论值校验 | 0 mV 附近无档位，按目标值校验会误报 |
+| — | `winsim_calibrate_series()`、`winsim_measure()`、`winsim_equiv_ohm()`、`winsim_learn_*()` | 自动标定串联电阻、被动学习原车开关 |
 | — | `winsim_clear_ovp()` | 规范要求的显式解锁接口 |
 
-`set_resistance()` 的目标阻值是模拟的按键电阻，不含 400 kΩ 回读负载；`set_voltage()` 和 `set_ratio()` 的模型包含这个负载。
+`set_resistance()` 的目标阻值是接口对地的电阻，含串联电阻，不含 400 kΩ 回读负载；`set_voltage()` 和 `set_ratio()` 的模型包含负载。
 
 ## 接入 Hardware-C 固件
 
@@ -68,16 +105,18 @@ make -C fw winsim-example
        HAL_GPIO_WritePin(GPIOG, GPIO_PIN_2, high ? GPIO_PIN_SET : GPIO_PIN_RESET);
    }
    ```
-   `adc_read_raw` 读 ADC3 上 PC2_C 对应的通道，通道号要按 ST 数据手册核对。
+   `adc_read_raw` 读 ADC3_INP0（PC2_C）。
 2. PG2 配置为推挽输出，初始低电平。PC2_C 保持模拟输入，SYSCFG 模拟开关保持默认的断开状态即可。
 3. 在 `HardFault_Handler` 和致命错误处理里先调用 `winsim_tca9539_emergency_off()`。
 4. I2C4 上还有 U111 TUSB320。两边都只能在前台循环里访问，不要在中断里调用本模块。
-5. **阻塞时间：** 每次设置约等待 `settle_delay_ms`（10 ms）。从 4800 到 0 mV、步长 50 mV、每档保持 30 ms 的扫描约需 4 s。在裸机主循环里，`delay_ms` 回调必须在等待期间继续处理 CAN 采集、USB 和显示，做法和现有 SD 协作等待相同，否则会丢帧。FreeRTOS 版本可以放进独立任务。
-6. `winsim_ctx_t` 约 16.5 KB，要放在静态区（AXI SRAM 或 DTCM），不要放在栈上。
+5. **阻塞时间：** 每次设置约等待 `settle_delay_ms`（10 ms），换通道并标定约 25 ms，4800 到 0 mV、步长 50 mV、每档保持 30 ms 的扫描约 4 s。在裸机主循环里，`delay_ms` 回调必须在等待期间继续处理 CAN 采集、USB 和显示，做法和现有 SD 协作等待相同，否则会丢帧。FreeRTOS 版本可以放进独立任务。
+6. `winsim_ctx_t` 约 33 KB，要放在静态区（AXI SRAM），不要放在栈上。
 
 ## 已验证和未验证
 
-- **已验证：** 主机上 13 组测试共 1241 项检查全部通过，在 ASan/UBSan 下运行。`make -C fw test lib` 的其余测试也全部通过。示例扫描还原出了仿真 APM 设定的 5 个门限。
-- **精度（仿真）：** 0–4600 mV 每 200 mV 一个测试点，最差误差 20 mV。换成 20 组 1% 误差的电阻、导通电阻偏离模型 2 Ω 时，最差仍是 20 mV。
-- **ARM 编译：** 用 Arm GNU Toolchain 15.2.Rel1 跑 `make -C fw -f Makefile.arm BOARD=reve check` 通过，两个文件都没有告警。目前没有调用方，链接后不留任何 winsim 符号，BIN 和 main 分支逐字节相同（SHA256 `e1178da6…`）。函数栈帧最大 160 B（`winsim_init`）。
-- **未验证：** STM32 平台回调、实板 I2C 和 ADC、与 APM 的联调。
+- **已验证：** 主机上 17 组测试共 1372 项检查全部通过，在 ASan/UBSan 下运行。
+- **精度（仿真）：** 200–4600 mV 每 200 mV 一个测试点。标称器件、串联 12.4 Ω 时最差 11 mV；20 组随机器件（1% 电阻、APM 上拉 ±1%、导通电阻偏离模型 2 Ω、串联 5–17 Ω）最差 19 mV。0 mV 时直通读数不超过 35 mV。
+- **标定和学习（仿真）：** 串联电阻 5–17 Ω 的标定误差不超过 0.2 Ω；被动测量 47 Ω–5.1 kΩ 的原车开关，反推电阻误差不超过 0.41%。
+- **示例：** 示例扫描在 K3 上还原出了仿真 APM 设定的 5 个门限。
+- **ARM 编译：** 用 Arm GNU Toolchain 15.2.Rel1 跑 `make -C fw -f Makefile.arm BOARD=reve check` 通过，两个文件都没有告警。目前没有调用方，链接后不留任何 winsim 符号，BIN 和 main 分支逐字节相同（SHA256 `e1178da6…`）。函数栈帧最大 208 B（`winsim_init`）。
+- **未验证：** STM32 平台回调、实板 I2C 和 ADC、与 APM 的联调；PTC 的具体料号和阻值。

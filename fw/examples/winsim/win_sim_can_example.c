@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * 集成示例：CAN 唤醒 APM → 确认 VCC2_5V_SW 已上电 → 4800→0 mV 每 50 mV 扫描，
- * 每一档读 CAN 车窗开关状态报文，最后打印电压与开关状态的对应表和档位门限。
+ * 集成示例：CAN 唤醒 APM → 切到指定通道并标定串联电阻 → 确认 VCC2_5V_SW 已上电 →
+ * 4800→0 mV 每 50 mV 扫描，每一档读 CAN 车窗开关状态报文，最后打印电压与开关状态的对应表和档位门限。
  *
  * 接入固件时，实现下面三个 apm_* 函数（用现有的 CAN 收发逻辑），
  * 用 winsim_tca9539_bind() 得到 HAL，再调用 winsim_example_run()。
@@ -68,7 +68,7 @@ static void on_step(const winsim_state_t *st, void *user)
         state = 0xFFu;
     }
 
-    printf("%5u  %5u  %5u   %03X  %s  %s\n", (unsigned)st->target_mv, (unsigned)st->expected_mv,
+    printf("%5u  %5u  %5u  %04X  %s  %s\n", (unsigned)st->target_mv, (unsigned)st->expected_mv,
            (unsigned)st->measured_mv, (unsigned)st->mask, st->short_0r ? "Y" : "-", switch_name(state));
 
     if (rec->have_prev && state != rec->prev_state && rec->n_edges < MAX_EDGES) {
@@ -83,10 +83,11 @@ static void on_step(const winsim_state_t *st, void *user)
     rec->prev_mv = st->measured_mv;
 }
 
-int winsim_example_run(winsim_ctx_t *ctx)
+int winsim_example_run(winsim_ctx_t *ctx, uint8_t ch)
 {
     static sweep_log_t slog;
     uint16_t v_open = 0u;
+    float r_series = 0.0f;
 
     if (!apm_can_send_wakeup()) {
         printf("CAN 唤醒报文发送失败\n");
@@ -94,7 +95,14 @@ int winsim_example_run(winsim_ctx_t *ctx)
     }
     apm_delay_ms(200u);   /* 等 VCC2_5V_SW 建立 */
 
-    winsim_status_t rc = winsim_probe_open_voltage(ctx, &v_open);
+    winsim_status_t rc = winsim_select_channel(ctx, ch, true, &r_series);
+    if (rc != WINSIM_OK) {
+        printf("K%u 选通或标定失败：%s\n", (unsigned)ch + 1u, winsim_status_str(rc));
+        return -1;
+    }
+    printf("K%u 已接通，串联电阻 %.1f Ω\n", (unsigned)ch + 1u, (double)r_series);
+
+    rc = winsim_probe_open_voltage(ctx, &v_open);
     if (rc != WINSIM_OK) {
         printf("空载电压 %u mV：%s\n", (unsigned)v_open, winsim_status_str(rc));
         return -1;
@@ -121,23 +129,28 @@ int winsim_example_run(winsim_ctx_t *ctx)
 /* ------------------------------------------------------------------ 桌面仿真 */
 #ifdef WINSIM_EXAMPLE_SIM
 
-/* 仿真 APM：2.2 kΩ 上拉到 5 V，唤醒后才供电；门限是编的，只为演示表格。 */
+/* 仿真 APM：2.2 kΩ 上拉到 5 V，唤醒后才供电；每路串联 PTC + 继电器约 12 Ω。门限是编的，只为演示表格。 */
 static bool     sim_awake;
 static uint16_t sim_mask;
 static bool     sim_short, sim_oe;
+static uint8_t  sim_ch;
+static const float sim_series[WINSIM_NUM_CH] = { 12.4f, 9.8f, 15.1f, 11.2f };
 
 static float sim_port_mv(void)
 {
     static const float bits[WINSIM_NUM_BITS] = {
         200.0f, 390.0f, 820.0f, 1600.0f, 3300.0f, 6200.0f,
-        13000.0f, 24000.0f, 47000.0f, 91000.0f, 180000.0f, 360000.0f,
+        13000.0f, 24000.0f, 47000.0f, 91000.0f, 180000.0f, 360000.0f, 100.0f,
     };
-    float g = 1.0f / 400000.0f;
+    float g_in = 0.0f;
     if (sim_oe && sim_short)
-        g += 1.0f / 0.05f;
+        g_in += 1.0f / 0.05f;
     for (unsigned i = 0; i < WINSIM_NUM_BITS; i++)
         if (sim_oe && (sim_mask & (1u << i)))
-            g += 1.0f / (bits[i] + 5.0f);
+            g_in += 1.0f / (bits[i] + 5.0f);
+    float g = 1.0f / 400000.0f;
+    if (g_in > 0.0f)
+        g += 1.0f / (sim_series[sim_ch] + 1.0f / g_in);
     float rp = 1.0f / g;
     return (sim_awake ? 5000.0f : 0.0f) * rp / (rp + 2200.0f);
 }
@@ -147,6 +160,7 @@ static void     sim_set_oe(bool en)         { sim_oe = en; }
 static void     sim_set_short(bool en)      { sim_short = en; }
 static uint16_t sim_adc(void)               { return (uint16_t)(sim_port_mv() + 0.5f); }
 static void     sim_delay(uint32_t ms)      { (void)ms; }
+static void     sim_select(uint8_t ch)      { sim_ch = ch; }
 
 bool apm_can_send_wakeup(void)
 {
@@ -175,14 +189,14 @@ void apm_delay_ms(uint32_t ms)
 int main(void)
 {
     static winsim_ctx_t ctx;
-    const winsim_hal_t hal = { sim_shift_write, sim_set_oe, sim_set_short, sim_adc, sim_delay };
+    const winsim_hal_t hal = { sim_shift_write, sim_set_oe, sim_set_short, sim_adc, sim_delay, sim_select };
 
     if (winsim_init(&ctx, &hal, NULL) != WINSIM_OK)
         return 1;
 
     /* 未唤醒时探测：应报告未供电。 */
     printf("唤醒前探测：%s\n", winsim_status_str(winsim_probe_open_voltage(&ctx, NULL)));
-    return winsim_example_run(&ctx) == 0 ? 0 : 1;
+    return winsim_example_run(&ctx, 2u) == 0 ? 0 : 1;   /* K3 */
 }
 
 #endif /* WINSIM_EXAMPLE_SIM */
