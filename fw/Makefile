@@ -187,5 +187,5 @@ test-winsim: $(BUILD)/test_win_sim
 	./$(BUILD)/test_win_sim
 winsim-example: $(BUILD)/winsim_example
 	./$(BUILD)/winsim_example
-$(BUILD)/winsim_example: services/winsim/examples/win_sim_can_example.c services/winsim/win_sim.c services/winsim/win_sim.h | $(BUILD)
+$(BUILD)/winsim_example: examples/winsim/win_sim_can_example.c services/winsim/win_sim.c services/winsim/win_sim.h | $(BUILD)
 	$(CC) $(CFLAGS) -fsanitize=address,undefined -DWINSIM_EXAMPLE_SIM -o $@ $(filter %.c,$^)

@@ -24,7 +24,7 @@ APM 售后测试扩展模块。监控器在 APM 的车窗开关输入上模拟�
 | --- | --- |
 | `win_sim.h` / `win_sim.c` | 核心驱动：查找表、控制字求解、中值回读、过压锁定、自动扫描 |
 | `win_sim_tca9539.h` / `.c` | 第 12 页硬件适配：HAL 到 TCA9539 寄存器、PG2 复位、PC2_C 折算 |
-| `examples/win_sim_can_example.c` | 集成示例：CAN 唤醒 → 探测空载电压 → 4800→0 mV 扫描 → 打印电压与开关状态对应表 |
+| `../../examples/winsim/win_sim_can_example.c` | 集成示例：CAN 唤醒 → 探测空载电压 → 4800→0 mV 扫描 → 打印电压与开关状态对应表 |
 | `../../tests/test_win_sim.c` | 主机单元测试，Mock HAL 按物理模型仿真 APM 输入和 TCA9539 寄存器 |
 
 ## 运行
@@ -36,7 +36,7 @@ make -C fw test-winsim
 make -C fw winsim-example
 ```
 
-`make -C fw test` 也会运行 `test_win_sim`。`services/winsim/*.c` 由 `services/*/*.c` 通配编进主机测试、模拟器动态库和 ARM 固件。ARM 固件里目前没有调用方，`--gc-sections` 会把它们丢掉。示例放在 `examples/` 子目录，不参与通配。
+`make -C fw test` 也会运行 `test_win_sim`。`services/winsim/*.c` 由 `services/*/*.c` 通配编进主机测试、模拟器动态库和 ARM 固件。ARM 固件里目前没有调用方，`--gc-sections` 会把它们丢掉。示例依赖集成方实现的 CAN 回调，所以放在 `fw/examples/winsim/`，不放在 `services/` 下。`run_ui_host.py` 和 `generate_ui_font.py` 会递归扫描 `services/` 下的全部 `.c`。
 
 ## 与 apm.md 的差异
 
