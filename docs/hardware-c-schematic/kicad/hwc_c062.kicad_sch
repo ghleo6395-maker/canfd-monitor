@@ -1602,7 +1602,7 @@
 		)
 		(uuid "eefd4472-c9e4-5d16-8b2d-a5eef05b46ce")
 	)
-	(text "附录 A：第 12 页第 2 版（APM 按键模拟，提案，不在上述网表内）。附录 B：APM 按键采集电路参考。"
+	(text "附录 A：第 12 页第 3 版（APM 按键模拟，提案，不在上述网表内）。附录 B：APM 按键采集电路参考。"
 		(exclude_from_sim no)
 		(at 20 236 0)
 		(effects
@@ -1611,7 +1611,7 @@
 			)
 			(justify left top)
 		)
-		(uuid "ab288b04-9de1-56f7-8efd-aa2606d42ad8")
+		(uuid "42d9c2cd-5693-55c2-b972-304b65c4e8cf")
 	)
 	(text "待确认（重画时在原图里看到的，原图如此，本册未改）"
 		(exclude_from_sim no)

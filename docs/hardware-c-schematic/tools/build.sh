@@ -13,4 +13,4 @@ $KICLI sch erc --format json --severity-all -o /tmp/hwc_c062_erc.json hwc_c062.k
 $KICLI sch export pdf -o /tmp/hwc_c062.pdf hwc_c062.kicad_sch >/dev/null 2>&1
 rm -f $OUT/*.kicad_prl
 swift $T/assemble.swift $D/Hardware-C-schematic-redrawn.pdf /tmp/hwc_c062.pdf \
-  $T/data/page12-rev2.svg "$D/../../apm按键采集图.pdf"
+  $T/data/page12-rev3.svg "$D/../../apm按键采集图.pdf"

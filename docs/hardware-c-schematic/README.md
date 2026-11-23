@@ -8,7 +8,7 @@
 | --- | --- |
 | 索引 | 各页之间的电源和信号关系图（点方框跳到对应页）、画法说明、待确认事项 |
 | 1–11 | 原图 11 页，页号和标题不变 |
-| 附录 A | 第 12 页第 2 版（APM 按键模拟，提案；完整说明在 PR #1 的 `docs/apm-keysim/`） |
+| 附录 A | 第 12 页第 3 版（APM 按键模拟，提案；完整说明在 PR #1 的 `docs/apm-keysim/`） |
 | 附录 B | APM 按键采集电路参考（仓库根目录的 `apm按键采集图.pdf`，未改动） |
 
 ## 和原图的关系
@@ -38,7 +38,7 @@
 | `tools/` | 生成上面工程和 PDF 的脚本 |
 | `tools/data/schematic-pins.json` | 从原工程导出的逐脚网表，比对用 |
 | `tools/data/orig_parts.json` | 原工程的元件属性（取值、料号、封装、是否贴装） |
-| `tools/data/page12-rev2.svg` | 附录 A 的图，复制自 PR #1 的 `docs/apm-keysim/schematic/`；那边改了要重新复制 |
+| `tools/data/page12-rev3.svg` | 附录 A 的图，复制自 PR #1 的 `docs/apm-keysim/schematic/`；那边改了要重新复制 |
 
 ## 重新生成
 

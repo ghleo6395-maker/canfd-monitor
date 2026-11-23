@@ -26,15 +26,17 @@ var box = CGRect(x: 0, y: 0, width: W, height: H)
 let ctx = CGContext(consumer: CGDataConsumer(data: data as CFMutableData)!, mediaBox: &box, nil)!
 NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
 
-// Appendix A: page 12 rev 2 (SVG, drawn as vector)
+// Appendix A: page 12 rev 3 (SVG, drawn as vector, fitted below the subtitle)
 ctx.beginPDFPage(nil)
-frame(ctx, title: "附录 A · 第 12 页第 2 版：APM 按键模拟（提案）",
+frame(ctx, title: "附录 A · 第 12 页第 3 版：APM 按键模拟（提案）",
       sub: ["这一页是新增电路的设计提案，还没有画进嘉立创EDA，不在本册的网表比对范围内。",
-            "引脚分配、电阻阵取值、元件清单和逐脚网表见仓库 docs/apm-keysim/schematic/page12-rev2.html。"],
+            "引脚分配、电阻阵取值、元件清单和逐脚网表见仓库 docs/apm-keysim/schematic/page12-rev3.html。"],
       page: "附录 A")
 let svg = NSImage(contentsOf: URL(fileURLWithPath: a[3]))!
-let sw = W - 2 * M, sh = sw * svg.size.height / svg.size.width
-svg.draw(in: NSRect(x: M, y: (H - 120 - sh) / 2 + 30, width: sw, height: sh))
+let areaTop = H - M - 50 - 18 - 8, areaBottom: CGFloat = 44
+let s = min((W - 2 * M) / svg.size.width, (areaTop - areaBottom) / svg.size.height)
+let sw = svg.size.width * s, sh = svg.size.height * s
+svg.draw(in: NSRect(x: (W - sw) / 2, y: areaBottom + (areaTop - areaBottom - sh) / 2, width: sw, height: sh))
 ctx.endPDFPage()
 
 // Appendix B: APM input reference (original PDF page, vector)
@@ -43,7 +45,7 @@ for i in 1...apm.numberOfPages {
     let pg = apm.page(at: i)!
     ctx.beginPDFPage(nil)
     frame(ctx, title: "附录 B · APM 按键采集电路参考",
-          sub: ["原始文件 apm按键采集图.pdf，原样放入，未改动。第 12 页第 2 版的回读和学习功能按这份电路设计。"],
+          sub: ["原始文件 apm按键采集图.pdf，原样放入，未改动。第 12 页的回读和学习功能按这份电路设计。"],
           page: "附录 B")
     let r = pg.getBoxRect(.mediaBox)
     let s = min((W - 2 * M) / r.width, (H - 150) / r.height)
@@ -63,7 +65,7 @@ let first = doc.pageCount
 for i in 0..<app.pageCount { doc.insert(app.page(at: i)!, at: doc.pageCount) }
 let root = doc.outlineRoot ?? PDFOutline()
 if doc.outlineRoot == nil { doc.outlineRoot = root }
-for (i, t) in ["附录 A · 第 12 页第 2 版（提案）", "附录 B · APM 按键采集电路参考"].enumerated() where first + i < doc.pageCount {
+for (i, t) in ["附录 A · 第 12 页第 3 版（提案）", "附录 B · APM 按键采集电路参考"].enumerated() where first + i < doc.pageCount {
     let o = PDFOutline(); o.label = t
     o.destination = PDFDestination(page: doc.page(at: first + i)!, at: NSPoint(x: 0, y: H))
     root.insertChild(o, at: root.numberOfChildren)
