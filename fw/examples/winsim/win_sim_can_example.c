@@ -141,6 +141,7 @@ static float sim_port_mv(void)
     static const float bits[WINSIM_NUM_BITS] = {
         200.0f, 390.0f, 820.0f, 1600.0f, 3300.0f, 6200.0f,
         13000.0f, 24000.0f, 47000.0f, 91000.0f, 180000.0f, 360000.0f, 100.0f,
+        47.0f, 150000.0f,
     };
     float g_in = 0.0f;
     if (sim_oe && sim_short)
@@ -148,7 +149,7 @@ static float sim_port_mv(void)
     for (unsigned i = 0; i < WINSIM_NUM_BITS; i++)
         if (sim_oe && (sim_mask & (1u << i)))
             g_in += 1.0f / (bits[i] + 5.0f);
-    float g = 1.0f / 400000.0f;
+    float g = 1.0f / 356000.0f;
     if (g_in > 0.0f)
         g += 1.0f / (sim_series[sim_ch] + 1.0f / g_in);
     float rp = 1.0f / g;
@@ -189,7 +190,8 @@ void apm_delay_ms(uint32_t ms)
 int main(void)
 {
     static winsim_ctx_t ctx;
-    const winsim_hal_t hal = { sim_shift_write, sim_set_oe, sim_set_short, sim_adc, sim_delay, sim_select };
+    const winsim_hal_t hal = { sim_shift_write, sim_set_oe, sim_set_short, sim_adc, sim_delay, sim_select,
+                               NULL, NULL, NULL };   /* 示例不演示空闲保持 */
 
     if (winsim_init(&ctx, &hal, NULL) != WINSIM_OK)
         return 1;

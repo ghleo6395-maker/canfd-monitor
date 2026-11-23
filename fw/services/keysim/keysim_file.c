@@ -72,7 +72,7 @@ static bool table_ok(const ks_table_t *t)
             k->mv > KS_FILE_MAX_MV)
             return false;
     }
-    return true;
+    return t->idle_mv <= KS_FILE_MAX_MV;
 }
 
 int ks_table_encode(const ks_table_t *table, uint8_t ch, char *buffer, size_t capacity, size_t *length)
@@ -94,6 +94,8 @@ int ks_table_encode(const ks_table_t *table, uint8_t ch, char *buffer, size_t ca
     if (capacity == 0u)
         return KS_FILE_ERR_SPACE;
     PUT("%s\nchannel=%u\nname=%s\n", HEADER, (unsigned)ch + 1u, table->name);
+    if (table->idle_mv)
+        PUT("idle=%u\n", (unsigned)table->idle_mv);
     for (unsigned i = 0; i < table->n; i++) {
         const ks_key_t *k = &table->keys[i];
         if (isfinite(k->ohm) && k->ohm >= 0.0f && k->ohm < 1e8f)
@@ -161,7 +163,7 @@ static int parse_key(const char *s, size_t n, ks_key_t *k)
 int ks_table_decode(const char *text, size_t length, ks_table_t *out)
 {
     size_t pos = 0u;
-    bool header = false, have_name = false;
+    bool header = false, have_name = false, have_idle = false;
     if (!out)
         return KS_FILE_ERR_ARGUMENT;
     memset(out, 0, sizeof *out);
@@ -208,6 +210,18 @@ int ks_table_decode(const char *text, size_t length, ks_table_t *out)
                 memcpy(out->name, line + 5, n - 5u);
                 out->name[n - 5u] = '\0';
                 have_name = true;
+            }
+        } else if (n >= 5u && memcmp(line, "idle=", 5u) == 0) {
+            unsigned long mv = 0u;
+            if (have_idle)
+                rc = KS_FILE_ERR_COUNT;
+            else if (!parse_uint(line + 5, n - 5u, 99999999u, &mv))
+                rc = KS_FILE_ERR_SYNTAX;
+            else if (mv < 1u || mv > KS_FILE_MAX_MV)
+                rc = KS_FILE_ERR_RANGE;
+            else {
+                out->idle_mv = (uint16_t)mv;
+                have_idle = true;
             }
         } else if (n >= 4u && memcmp(line, "key=", 4u) == 0) {
             if (out->n >= KS_MAX_KEYS)

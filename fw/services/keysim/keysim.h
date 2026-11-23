@@ -5,11 +5,14 @@
  *   - 学习：电阻阵保持高阻，每 50 ms 测一次接口电压，喂给 winsim_learn_feed()；
  *   - 扫描：从 4800 mV 每 50 mV 往下设，每档停 30 ms 后读 APM 上报的开关状态，记下门限；
  *   - 空闲时每 300 ms 测一次接口电压，用来显示 APM 是否上电、检测过压；
+ *   - 空闲保持（第 3 版硬件）：用户在某一路打开后，按键值表里学到的空闲电压建立并监测。
+ *     默认关闭——原车开关拔掉后再打开，接回原车开关前先关（否则两者并联，APM 可能看成按键）；
+ *     保持中发现接口被拉低会自动断开并提示；原车开关拔掉（接口电压升高）会自动重新建立；
  *   - 键值表存 SD 卡 /APMKEY/K1.TXT … K4.TXT（格式见 keysim_file.h）：保存时排一个写请求，
  *     SD 卡每次就绪时排一个读请求；由存储所有者（板级 storage_files.inc、模拟器 env_sim.c）在
  *     卡空闲时执行，和发送方案的存储方式相同。
  *
- * 板上没有第 12 页硬件时（当前的 Rev D/E 目标），服务编译成空壳：不分配约 33 KB 的驱动上下文，
+ * 板上没有第 12 页硬件时（当前的 Rev D/E 目标），服务编译成空壳：不分配驱动上下文（第 3 版约 1.7 KB），
  * keysim_available() 返回 false，界面不显示入口，也不会产生 SD 请求。定义 CANFD_WINSIM_HW 可在目标板上启用。 */
 #ifndef KEYSIM_H
 #define KEYSIM_H
@@ -39,9 +42,21 @@ typedef struct {
 typedef struct {
     bool     valid;
     char     name[24];
+    uint16_t idle_mv;            /* 学到的空闲电压，0 = 不知道（不能保持空闲） */
     uint8_t  n;
     ks_key_t keys[KS_MAX_KEYS];
 } ks_table_t;
+
+typedef enum {
+    KS_HOLD_OFF = 0,      /* 用户没打开（默认） */
+    KS_HOLD_NONE,         /* 已打开，还没建立：没有空闲电压、APM 没上电，或等待重试 */
+    KS_HOLD_OPEN,         /* 不需要接空闲支路：原车开关在线，或空闲本来就是开路 */
+    KS_HOLD_ON,           /* 空闲支路接通，保持学到的电压 */
+    KS_HOLD_RANGE,        /* 所需电阻或电流超出范围，没接 */
+    KS_HOLD_INACCURATE,   /* 接通了，但回读和空闲电压差超过 80 mV */
+    KS_HOLD_LOST,         /* 保持中接口被拉低（原车开关接回？），已断开 */
+    KS_HOLD_NO_HW         /* 板上没有空闲保持硬件 */
+} ks_hold_t;
 
 typedef struct {
     int16_t  from, to;           /* APM 开关状态 */
@@ -54,6 +69,10 @@ typedef struct {
     uint8_t         ch;
     bool            calibrated[WINSIM_NUM_CH];
     float           r_series[WINSIM_NUM_CH];
+    float           pullup[WINSIM_NUM_CH];   /* 辨识出的 APM 上拉（已扣回读负载），0 = 还没辨识 */
+    bool            pulsed[WINSIM_NUM_CH];   /* 上拉是脉冲供电 */
+    uint8_t         hold[WINSIM_NUM_CH];     /* ks_hold_t */
+    uint16_t        hold_mv[WINSIM_NUM_CH];  /* 空闲保持建立后的回读 */
     uint16_t        port_mv;         /* 最近一次接口电压 */
     bool            supply_ok;       /* 最近一次空闲测量 ≥ min_open_mv */
     bool            ovp;
@@ -110,8 +129,9 @@ bool            keysim_state_known(void);         /* 当前通道能读到 APM �
 int             keysim_apm_state(void);           /* 当前通道 APM 开关状态，未知为 -1 */
 const char     *keysim_state_name(int state);
 
-winsim_status_t keysim_select(uint8_t ch);        /* 换通道并标定串联电阻 */
+winsim_status_t keysim_select(uint8_t ch);        /* 换通道并辨识（APM 上拉、串联电阻） */
 winsim_status_t keysim_recalibrate(void);
+winsim_status_t keysim_hold_ok(void);             /* 当前通道的空闲保持：关→开、保持中→关、其它→重新建立 */
 winsim_status_t keysim_press(int index);          /* 按 press_mode 按下第 index 个键；保持模式下再按一次松开 */
 winsim_status_t keysim_manual_toggle(void);
 void            keysim_manual_adjust(int delta_mv);

@@ -3,12 +3,15 @@
 
 #include <stddef.h>
 
-#define P1_MASK_BITS 0x0Fu   /* P10–P13 = b8–b11 */
+#define P1_MASK_BITS 0x0Fu   /* U801 P10–P13 = b8–b11 */
 #define P1_KEEP_ON_WRITE (WINSIM_TCA9539_P1_SHORT | WINSIM_TCA9539_P1_CH_MASK)
+#define B0_SAFE (WINSIM_TCA9539_B0_SYNC_ALL)    /* U808 复位后的安全值：SYNC 高，其余低 */
+#define B1_SAFE (WINSIM_TCA9539_B1_IDLE_ALL)    /* 继电器全断 */
 
 static struct {
     winsim_tca9539_port_t port;
-    uint8_t  out[2];     /* 输出寄存器影子：先改影子，允许输出时再写入芯片 */
+    uint8_t  a[2];       /* U801 输出寄存器影子：先改影子，允许输出时再写入芯片 */
+    uint8_t  b[2];       /* U808 输出寄存器影子 */
     bool     enabled;
     bool     bound;
     uint32_t errors;
@@ -22,9 +25,10 @@ winsim_tca9539_port_t winsim_tca9539_default_port(void)
     p.adc_read_raw = NULL;
     p.delay_ms = NULL;
     p.addr7 = WINSIM_TCA9539_ADDR;
+    p.addr7_b = WINSIM_TCA9539_ADDR_B;
     p.adc_full_scale = 65535u;
     p.adc_vref_mv = 3300u;
-    p.divider_ratio = 4.0f;
+    p.divider_ratio = 356.0f / 56.0f;   /* (R815 + R819) / R819 */
     return p;
 }
 
@@ -32,46 +36,78 @@ static void force_off(void)
 {
     s_tca.port.reset_pin(false);
     s_tca.enabled = false;
+    /* U808 复位后继电器、升压、b13/b14 都已关断；影子也回到安全值，下次允许输出时不会重新接通。 */
+    s_tca.b[0] = B0_SAFE;
+    s_tca.b[1] = B1_SAFE;
 }
 
-static bool wr(uint8_t reg, const uint8_t *data, uint8_t len)
+static bool wr(uint8_t addr, uint8_t reg, const uint8_t *data, uint8_t len)
 {
-    if (s_tca.port.i2c_write(s_tca.port.addr7, reg, data, len))
+    if (s_tca.port.i2c_write(addr, reg, data, len))
         return true;
     s_tca.errors++;
     return false;
 }
 
+/* 写入芯片；失败时关断并返回 false。未允许输出时只改影子。 */
+static bool put_a(uint8_t reg, const uint8_t *data, uint8_t len)
+{
+    if (!s_tca.enabled)
+        return false;
+    if (wr(s_tca.port.addr7, reg, data, len))
+        return true;
+    force_off();
+    return false;
+}
+
+static bool put_b(uint8_t reg, const uint8_t *data, uint8_t len)
+{
+    if (!s_tca.enabled)
+        return false;
+    if (wr(s_tca.port.addr7_b, reg, data, len))
+        return true;
+    force_off();
+    return false;
+}
+
 static void tca_shift_write(uint16_t mask)
 {
-    s_tca.out[0] = (uint8_t)(mask & 0xFFu);
-    s_tca.out[1] = (uint8_t)((s_tca.out[1] & P1_KEEP_ON_WRITE) | ((mask >> 8) & P1_MASK_BITS) |
-                             ((mask & 0x1000u) ? WINSIM_TCA9539_P1_B12 : 0u));
-    if (s_tca.enabled && !wr(WINSIM_TCA9539_REG_OUT, s_tca.out, 2u))
-        force_off();
+    uint8_t b0 = (uint8_t)((s_tca.b[0] & (uint8_t)~WINSIM_TCA9539_B0_B13) |
+                           ((mask & 0x2000u) ? WINSIM_TCA9539_B0_B13 : 0u));
+    uint8_t b1 = (uint8_t)((s_tca.b[1] & (uint8_t)~WINSIM_TCA9539_B1_B14) |
+                           ((mask & 0x4000u) ? WINSIM_TCA9539_B1_B14 : 0u));
+    s_tca.a[0] = (uint8_t)(mask & 0xFFu);
+    s_tca.a[1] = (uint8_t)((s_tca.a[1] & P1_KEEP_ON_WRITE) | ((mask >> 8) & P1_MASK_BITS) |
+                           ((mask & 0x1000u) ? WINSIM_TCA9539_P1_B12 : 0u));
+    if (s_tca.enabled && !put_a(WINSIM_TCA9539_REG_OUT, s_tca.a, 2u))
+        return;
+    if (b0 != s_tca.b[0] || b1 != s_tca.b[1]) {
+        s_tca.b[0] = b0;
+        s_tca.b[1] = b1;
+        put_b(WINSIM_TCA9539_REG_OUT, s_tca.b, 2u);
+    }
 }
 
 static void tca_set_short_0r(bool enable)
 {
     if (enable)
-        s_tca.out[1] = (uint8_t)(s_tca.out[1] | WINSIM_TCA9539_P1_SHORT);
+        s_tca.a[1] = (uint8_t)(s_tca.a[1] | WINSIM_TCA9539_P1_SHORT);
     else
-        s_tca.out[1] = (uint8_t)(s_tca.out[1] & ~WINSIM_TCA9539_P1_SHORT);
-    if (s_tca.enabled && !wr((uint8_t)(WINSIM_TCA9539_REG_OUT + 1u), &s_tca.out[1], 1u))
-        force_off();
+        s_tca.a[1] = (uint8_t)(s_tca.a[1] & ~WINSIM_TCA9539_P1_SHORT);
+    put_a((uint8_t)(WINSIM_TCA9539_REG_OUT + 1u), &s_tca.a[1], 1u);
 }
 
 static void tca_select_channel(uint8_t ch)
 {
-    s_tca.out[1] = (uint8_t)((s_tca.out[1] & (uint8_t)~WINSIM_TCA9539_P1_CH_MASK) |
-                             ((uint8_t)(ch & 3u) << WINSIM_TCA9539_P1_CH_SHIFT));
-    if (s_tca.enabled && !wr((uint8_t)(WINSIM_TCA9539_REG_OUT + 1u), &s_tca.out[1], 1u))
-        force_off();
+    s_tca.a[1] = (uint8_t)((s_tca.a[1] & (uint8_t)~WINSIM_TCA9539_P1_CH_MASK) |
+                           ((uint8_t)(ch & 3u) << WINSIM_TCA9539_P1_CH_SHIFT));
+    put_a((uint8_t)(WINSIM_TCA9539_REG_OUT + 1u), &s_tca.a[1], 1u);
 }
 
 static void tca_set_oe(bool enable)
 {
     static const uint8_t all_outputs[2] = { 0x00u, 0x00u };
+    static const uint8_t b_outputs[2] = { 0x00u, WINSIM_TCA9539_B1_CFG };
     if (!enable) {
         force_off();
         return;
@@ -80,8 +116,11 @@ static void tca_set_oe(bool enable)
         return;
     s_tca.port.reset_pin(true);
     s_tca.port.delay_ms(1u);
-    /* 复位后输出寄存器为 0xFF、方向为输入：先写输出值，再切输出方向。 */
-    if (!wr(WINSIM_TCA9539_REG_OUT, s_tca.out, 2u) || !wr(WINSIM_TCA9539_REG_CFG, all_outputs, 2u)) {
+    /* 复位后输出寄存器为 0xFF、方向为输入：每片先写输出值，再切输出方向。 */
+    if (!wr(s_tca.port.addr7, WINSIM_TCA9539_REG_OUT, s_tca.a, 2u) ||
+        !wr(s_tca.port.addr7, WINSIM_TCA9539_REG_CFG, all_outputs, 2u) ||
+        !wr(s_tca.port.addr7_b, WINSIM_TCA9539_REG_OUT, s_tca.b, 2u) ||
+        !wr(s_tca.port.addr7_b, WINSIM_TCA9539_REG_CFG, b_outputs, 2u)) {
         force_off();
         return;
     }
@@ -102,15 +141,61 @@ static void tca_delay_ms(uint32_t ms)
     s_tca.port.delay_ms(ms);
 }
 
+/* ---- 第 3 版：空闲保持 ---- */
+
+static void tca_idle_power(bool on)
+{
+    s_tca.b[0] = (uint8_t)(on ? (s_tca.b[0] | WINSIM_TCA9539_B0_VPOT) : (s_tca.b[0] & ~WINSIM_TCA9539_B0_VPOT));
+    put_b(WINSIM_TCA9539_REG_OUT, &s_tca.b[0], 1u);
+}
+
+static void tca_idle_connect(uint8_t ch, bool on)
+{
+    uint8_t bit = WINSIM_TCA9539_B1_IDLE_N(ch & 3u);
+    s_tca.b[1] = (uint8_t)(on ? (s_tca.b[1] & ~bit) : (s_tca.b[1] | bit));
+    put_b((uint8_t)(WINSIM_TCA9539_REG_OUT + 1u), &s_tca.b[1], 1u);
+}
+
+static bool spi_edge(uint8_t b0)
+{
+    s_tca.b[0] = b0;
+    return put_b(WINSIM_TCA9539_REG_OUT, &s_tca.b[0], 1u);
+}
+
+/* 一帧 16 位，MSB 先出：SYNC 拉低，每位先 SCLK 高 + 数据，再 SCLK 低（AD5292 在下降沿锁存），最后 SYNC 拉高执行。 */
+static bool spi_frame(uint8_t ch, uint16_t word)
+{
+    uint8_t base = (uint8_t)(s_tca.b[0] & (uint8_t)~(WINSIM_TCA9539_B0_SCLK | WINSIM_TCA9539_B0_DIN));
+    uint8_t sync = WINSIM_TCA9539_B0_SYNC(ch & 3u);
+    if (!spi_edge((uint8_t)(base & ~sync)))
+        return false;
+    for (int i = 15; i >= 0; i--) {
+        uint8_t d = (word >> i) & 1u ? WINSIM_TCA9539_B0_DIN : 0u;
+        if (!spi_edge((uint8_t)((base & ~sync) | d | WINSIM_TCA9539_B0_SCLK)) ||
+            !spi_edge((uint8_t)((base & ~sync) | d)))
+            return false;
+    }
+    return spi_edge((uint8_t)(base | sync));
+}
+
+static void tca_idle_write(uint8_t ch, uint16_t code)
+{
+    if (!s_tca.enabled)
+        return;
+    if (spi_frame(ch, WINSIM_AD5292_CTRL_WRITE_EN))
+        spi_frame(ch, WINSIM_AD5292_RDAC(code));
+}
+
 bool winsim_tca9539_bind(const winsim_tca9539_port_t *port, winsim_hal_t *hal_out)
 {
     if (!port || !hal_out || !port->i2c_write || !port->reset_pin || !port->adc_read_raw ||
-        !port->delay_ms || port->adc_full_scale == 0u || !(port->divider_ratio > 0.0f))
+        !port->delay_ms || port->adc_full_scale == 0u || !(port->divider_ratio > 0.0f) ||
+        port->addr7 == port->addr7_b)
         return false;
 
     s_tca.port = *port;
-    s_tca.out[0] = 0u;
-    s_tca.out[1] = 0u;
+    s_tca.a[0] = 0u;
+    s_tca.a[1] = 0u;
     s_tca.errors = 0u;
     s_tca.bound = true;
     force_off();
@@ -121,6 +206,9 @@ bool winsim_tca9539_bind(const winsim_tca9539_port_t *port, winsim_hal_t *hal_ou
     hal_out->adc_read_mv = tca_adc_read_mv;
     hal_out->delay_ms = tca_delay_ms;
     hal_out->select_channel = tca_select_channel;
+    hal_out->idle_power = tca_idle_power;
+    hal_out->idle_write = tca_idle_write;
+    hal_out->idle_connect = tca_idle_connect;
     return true;
 }
 

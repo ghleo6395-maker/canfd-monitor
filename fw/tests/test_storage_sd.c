@@ -356,7 +356,7 @@ static void keysim_files(void)
     CHECK(key_result==KS_IO_ERR_IO);
     CHECK(read_text("0:/APMKEY/K2.TXT",text,sizeof text)&&strstr(text,"name=扫描 · K2"));
     /* Invalid table is refused before any file is touched. */
-    ks_table_t bad=learned;bad.keys[0].mv=6000;
+    ks_table_t bad=learned;bad.keys[0].mv=16001;
     key_io(KS_IO_SAVE,1,&bad);CHECK(key_result==KS_FILE_ERR_NAME);
     CHECK(read_text("0:/APMKEY/K2.TXT",text,sizeof text)&&strstr(text,"name=扫描 · K2"));
     /* Read-only file is not replaced. */

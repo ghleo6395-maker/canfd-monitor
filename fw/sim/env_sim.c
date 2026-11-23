@@ -290,13 +290,15 @@ static void bus_defaults(int ch)
 }
 
 
-/* ---------- 按键模拟：第 12 页电路 + 4 路仿真 APM ----------
- * 每一路：APM 内部 2.2 kΩ 上拉到 5 V（唤醒后才有电），接口侧 400 kΩ 回读负载，
- * 可选并着的原车开关（4 个档位），以及驱动事先不知道的串联电阻（PTC + 继电器）。
+/* ---------- 按键模拟：第 12 页第 3 版电路 + 4 路仿真 APM ----------
+ * 每一路：APM 内部上拉（默认 2.2 kΩ，台架可改）到 5 V（唤醒后才有电），接口侧 356 kΩ 回读负载，
+ * 可选并着的原车开关（4 个档位，空闲时可以带一个电阻），驱动事先不知道的串联电阻（PTC + 继电器），
+ * 以及本板的空闲支路（继电器 + 2.2 kΩ + AD5292 50 kΩ）。
  * APM 的开关状态按演示门限判定，代替将来从 CAN 报文解码出来的信号。 */
 static const float ks_bits[WINSIM_NUM_BITS] = {
     200.0f, 390.0f, 820.0f, 1600.0f, 3300.0f, 6200.0f,
     13000.0f, 24000.0f, 47000.0f, 91000.0f, 180000.0f, 360000.0f, 100.0f,
+    47.0f, 150000.0f,
 };
 static const float ks_switch_ohm[5] = { 0.0f, 5100.0f, 2200.0f, 1000.0f, 330.0f };   /* 0 = 松开 */
 static const float ks_series_ohm[WINSIM_NUM_CH] = { 12.4f, 9.8f, 15.1f, 11.2f };
@@ -308,6 +310,11 @@ static struct {
     bool     attached[WINSIM_NUM_CH];
     uint8_t  pos[WINSIM_NUM_CH];
     bool     fault[WINSIM_NUM_CH];
+    float    pullup[WINSIM_NUM_CH];     /* APM 上拉 */
+    float    sw_idle[WINSIM_NUM_CH];    /* 原车开关松开时的电阻，0 = 开路 */
+    bool     vpot;
+    bool     idle_on[WINSIM_NUM_CH];
+    uint16_t idle_code[WINSIM_NUM_CH];
 } KS;
 
 /* 模拟 SD 卡上的 /APMKEY/K1.TXT … K4.TXT。设备断电重启不丢，格式化或重置模拟器才清空。 */
@@ -359,8 +366,11 @@ static void ks_reset(void)
     ks_files_clear();
     memset(&KS, 0, sizeof KS);
     KS.apm_awake = true;
-    for (unsigned k = 0; k < WINSIM_NUM_CH; k++)
+    for (unsigned k = 0; k < WINSIM_NUM_CH; k++) {
         KS.attached[k] = true;
+        KS.pullup[k] = 2200.0f;
+        KS.idle_code[k] = 512u;
+    }
 }
 
 static float ks_port_mv(unsigned ch)
@@ -368,9 +378,13 @@ static float ks_port_mv(unsigned ch)
     if (KS.fault[ch])
         return 12000.0f;
     float vs = KS.apm_awake ? 5000.0f : 0.0f;
-    float g = 1.0f / 400000.0f;
+    float g = 1.0f / 356000.0f;
     if (KS.attached[ch] && KS.pos[ch])
         g += 1.0f / ks_switch_ohm[KS.pos[ch]];
+    else if (KS.attached[ch] && KS.sw_idle[ch] > 0.0f)
+        g += 1.0f / KS.sw_idle[ch];
+    if (KS.oe && KS.idle_on[ch])
+        g += 1.0f / (2203.0f + 85.0f + (float)KS.idle_code[ch] * 50000.0f / 1024.0f);
     if (KS.oe && ch == KS.ch) {
         float g_in = KS.sh ? 1.0f / 0.05f : 0.0f;
         for (unsigned i = 0; i < WINSIM_NUM_BITS; i++)
@@ -380,11 +394,32 @@ static float ks_port_mv(unsigned ch)
             g += 1.0f / (ks_series_ohm[ch] + 1.0f / g_in);
     }
     float rp = 1.0f / g;
-    return vs * rp / (rp + 2200.0f);
+    return vs * rp / (rp + KS.pullup[ch]);
 }
 
 static void     ks_shift(uint16_t mask) { KS.mask = mask; }
-static void     ks_oe(bool en) { KS.oe = en; }
+static void     ks_oe(bool en)
+{
+    KS.oe = en;
+    if (!en) {                 /* 复位：继电器、升压全断，电位器回中间值 */
+        KS.vpot = false;
+        for (unsigned k = 0; k < WINSIM_NUM_CH; k++) {
+            KS.idle_on[k] = false;
+            KS.idle_code[k] = 512u;
+        }
+    }
+}
+static void     ks_idle_power(bool on) { KS.vpot = on; }
+static void     ks_idle_write(uint8_t ch, uint16_t code)
+{
+    if (KS.oe && KS.vpot && ch < WINSIM_NUM_CH)
+        KS.idle_code[ch] = (uint16_t)(code & 0x3FFu);
+}
+static void     ks_idle_connect(uint8_t ch, bool on)
+{
+    if (KS.oe && ch < WINSIM_NUM_CH)
+        KS.idle_on[ch] = on;
+}
 static void     ks_short(bool en) { KS.sh = en; }
 static void     ks_delay(uint32_t ms) { (void)ms; }   /* 物理模型没有时间常数 */
 static void     ks_select(uint8_t ch) { KS.ch = (uint8_t)(ch % WINSIM_NUM_CH); }
@@ -393,8 +428,8 @@ static uint16_t ks_adc(void)
     if (!KS.oe)
         return 0u;
     float v = ks_port_mv(KS.ch);
-    if (v > 13200.0f)
-        v = 13200.0f;
+    if (v > 20978.0f)
+        v = 20978.0f;
     return (uint16_t)(v + 0.5f);
 }
 
@@ -406,6 +441,9 @@ bool port_keysim_hal(winsim_hal_t *out)
     out->adc_read_mv = ks_adc;
     out->delay_ms = ks_delay;
     out->select_channel = ks_select;
+    out->idle_power = ks_idle_power;
+    out->idle_write = ks_idle_write;
+    out->idle_connect = ks_idle_connect;
     return true;
 }
 
@@ -435,6 +473,14 @@ static int ks_cmd(const char *c, int a, int b)
         KS.pos[a] = KS.attached[a] ? (uint8_t)b : 0u;
     } else if (strcmp(c, "ks_fault") == 0) {
         KS.fault[a] = b != 0;
+    } else if (strcmp(c, "ks_pullup") == 0) {
+        if (b < 100 || b > 100000)
+            return -1;
+        KS.pullup[a] = (float)b;
+    } else if (strcmp(c, "ks_idle_r") == 0) {
+        if (b < 0 || b > 1000000)
+            return -1;
+        KS.sw_idle[a] = (float)b;
     } else {
         return -1;
     }
@@ -455,6 +501,10 @@ static void ks_json(jw_t *j)
         jw_kint(j, "pos", KS.pos[k]);
         jw_kbool(j, "fault", KS.fault[k]);
         jw_kint(j, "port_mv", (int64_t)(ks_port_mv(k) + 0.5f));
+        jw_kint(j, "pullup", (int64_t)KS.pullup[k]);
+        jw_kint(j, "sw_idle", (int64_t)KS.sw_idle[k]);
+        jw_kbool(j, "idle_on", KS.idle_on[k]);
+        jw_kint(j, "idle_code", KS.idle_code[k]);
         jw_kint(j, "state", port_keysim_apm_state((uint8_t)k));
         jw_kbool(j, "sd_file", KSF.len[k] != 0u);
         jw_end_obj(j);

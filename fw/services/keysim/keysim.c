@@ -38,6 +38,7 @@ bool            keysim_state_known(void) { return false; }
 int             keysim_apm_state(void) { return -1; }
 winsim_status_t keysim_select(uint8_t ch) { (void)ch; return WINSIM_ERR_PARAM; }
 winsim_status_t keysim_recalibrate(void) { return WINSIM_ERR_PARAM; }
+winsim_status_t keysim_hold_ok(void) { return WINSIM_ERR_PARAM; }
 winsim_status_t keysim_press(int index) { (void)index; return WINSIM_ERR_PARAM; }
 winsim_status_t keysim_manual_toggle(void) { return WINSIM_ERR_PARAM; }
 void            keysim_manual_adjust(int delta_mv) { (void)delta_mv; }
@@ -62,11 +63,14 @@ bool            keysim_resave(void) { return false; }
 
 #define IDLE_POLL_MS  300u
 #define LEARN_POLL_MS 50u
+#define HOLD_DROP_MV  150u   /* 保持中接口比建立时低这么多：有东西并上来了，断开 */
+#define HOLD_RISE_MV  60u    /* 不需要保持时开路电压比学到的空闲高这么多：原车开关拔掉了，重新建立 */
+#define HOLD_RETRY    10u    /* 没上电时隔几个空闲周期再试 */
 
 static const char *const k_key_names[] = { "上升", "一键上升", "下降", "一键下降", "对地短路", "自定义" };
 #define KEY_NAME_N ((int)(sizeof k_key_names / sizeof k_key_names[0]))
 
-static winsim_ctx_t   ws;            /* 约 33 KB */
+static winsim_ctx_t   ws;
 static winsim_learn_t learner;
 static keysim_t       K;
 static uint32_t       idle_t, learn_t, tap_t, scan_t;
@@ -78,6 +82,8 @@ static bool           storage_was_ready;
 static bool           scan_waiting;
 static int16_t        scan_prev;
 static uint16_t       scan_prev_mv;
+static uint8_t        hold_rr;                      /* 后台轮到哪一路 */
+static uint8_t        hold_retry[WINSIM_NUM_CH];
 
 const keysim_t *keysim_get(void) { return &K; }
 bool keysim_available(void) { return K.available; }
@@ -103,7 +109,19 @@ static void sync_channel(void)
     for (unsigned k = 0; k < WINSIM_NUM_CH; k++) {
         K.calibrated[k] = ws.series_cal[k];
         K.r_series[k] = ws.series_cal[k] ? ws.r_series_ch[k] : ws.cfg.r_series_ohm;
+        float rth = ws.src[k].ok ? ws.src[k].rth_ohm : 0.0f;
+        float g = rth > 0.0f ? 1.0f / rth - (ws.cfg.r_adc_load_ohm > 0.0f ? 1.0f / ws.cfg.r_adc_load_ohm : 0.0f) : 0.0f;
+        K.pullup[k] = g > 0.0f ? 1.0f / g : 0.0f;
+        K.pulsed[k] = ws.src[k].pulsed;
     }
+}
+
+/* 过压时驱动已断开所有空闲支路：保持中的通道回到“待建立”。 */
+static void hold_after_ovp(void)
+{
+    for (unsigned k = 0; k < WINSIM_NUM_CH; k++)
+        if (K.hold[k] == KS_HOLD_ON || K.hold[k] == KS_HOLD_INACCURATE)
+            K.hold[k] = KS_HOLD_NONE;
 }
 
 static winsim_status_t note(winsim_status_t rc)
@@ -113,6 +131,7 @@ static winsim_status_t note(winsim_status_t rc)
         K.ovp = true;
         K.activity = KS_IDLE;
         K.pressed = -1;
+        hold_after_ovp();
     }
     K.port_mv = ws.current_state.measured_mv ? ws.current_state.measured_mv : K.port_mv;
     return rc;
@@ -135,7 +154,128 @@ void keysim_init(void)
         return;
     K.available = true;
     K.channels = ws.cfg.num_channels;
+    hold_rr = 0u;
+    for (unsigned k = 0; k < WINSIM_NUM_CH; k++) {
+        K.hold[k] = winsim_idle_supported(&ws) ? KS_HOLD_OFF : KS_HOLD_NO_HW;
+        hold_retry[k] = 0u;
+    }
     sync_channel();
+}
+
+/* ------------------------------------------------------------------ 空闲保持 */
+
+static void stop_activity(void);
+
+/* 在第 ch 路按键值表的空闲电压建立保持；做完换回原来的通道（不重新辨识）。 */
+static winsim_status_t hold_arm(uint8_t ch)
+{
+    winsim_idle_t id;
+    const ks_table_t *t = &K.tables[ch];
+    if (K.hold[ch] == KS_HOLD_NO_HW || K.hold[ch] == KS_HOLD_OFF)
+        return WINSIM_ERR_UNSUPPORTED;
+    if (!t->valid || t->idle_mv == 0u) {
+        winsim_idle_release(&ws, ch);
+        K.hold[ch] = KS_HOLD_NONE;
+        return WINSIM_ERR_PARAM;
+    }
+    memset(&id, 0, sizeof id);
+    uint8_t back = ws.channel;
+    winsim_status_t rc = winsim_idle_hold(&ws, ch, t->idle_mv, &id);
+    if (back != ws.channel && !ws.ovp_latched)
+        winsim_select_channel(&ws, back, false, NULL);
+    K.hold_mv[ch] = id.measured_mv;
+    switch (rc) {
+    case WINSIM_OK:          K.hold[ch] = id.on ? KS_HOLD_ON : KS_HOLD_OPEN; break;
+    case WINSIM_ERR_RANGE:   K.hold[ch] = KS_HOLD_RANGE; break;
+    case WINSIM_ERR_VERIFY_FAIL: K.hold[ch] = KS_HOLD_INACCURATE; break;
+    default:
+        K.hold[ch] = KS_HOLD_NONE;
+        hold_retry[ch] = HOLD_RETRY;
+        break;
+    }
+    if (rc == WINSIM_ERR_OVERVOLTAGE)
+        note(rc);
+    sync_channel();
+    return rc;
+}
+
+/* 键值表换了：打开了保持的通道重新建立。 */
+static void hold_table_changed(uint8_t ch)
+{
+    if (K.hold[ch] != KS_HOLD_OFF && K.hold[ch] != KS_HOLD_NO_HW) {
+        winsim_idle_release(&ws, ch);
+        K.hold[ch] = KS_HOLD_NONE;
+        hold_retry[ch] = 0u;
+    }
+}
+
+/* 后台：每个空闲周期处理一路——还没建立的去建立，建立了的量一次看是否被拉低或原车开关被拔掉。 */
+static void hold_background(void)
+{
+    for (unsigned n = 0; n < WINSIM_NUM_CH; n++) {
+        uint8_t ch = (uint8_t)((hold_rr + n) % K.channels);
+        uint8_t st = K.hold[ch];
+        if (st == KS_HOLD_OFF || st == KS_HOLD_NO_HW || st == KS_HOLD_RANGE || st == KS_HOLD_LOST)
+            continue;
+        if (st == KS_HOLD_NONE && (!K.tables[ch].valid || !K.tables[ch].idle_mv))
+            continue;
+        hold_rr = (uint8_t)((ch + 1u) % K.channels);
+        if (st == KS_HOLD_NONE) {
+            if (hold_retry[ch]) {
+                hold_retry[ch]--;
+                return;
+            }
+            hold_arm(ch);
+            return;
+        }
+        /* 量一次这一路（电阻阵高阻）。 */
+        uint16_t mv = 0u;
+        uint8_t back = ws.channel;
+        if (ch != back && winsim_select_channel(&ws, ch, false, NULL) != WINSIM_OK)
+            return;
+        winsim_status_t rc = winsim_measure(&ws, &mv);
+        if (ch != back && !ws.ovp_latched)
+            winsim_select_channel(&ws, back, false, NULL);
+        if (rc == WINSIM_ERR_OVERVOLTAGE) {
+            note(rc);
+            return;
+        }
+        if (mv < ws.cfg.min_open_mv)
+            return;                                    /* APM 睡着了：不动 */
+        if ((st == KS_HOLD_ON || st == KS_HOLD_INACCURATE) && (uint32_t)mv + HOLD_DROP_MV < K.hold_mv[ch]) {
+            winsim_idle_release(&ws, ch);              /* 有东西并上来了（原车开关接回？） */
+            K.hold[ch] = KS_HOLD_LOST;
+        } else if (st == KS_HOLD_OPEN && mv > K.tables[ch].idle_mv + HOLD_RISE_MV) {
+            hold_arm(ch);                              /* 原车开关拔掉了 */
+        }
+        return;
+    }
+}
+
+winsim_status_t keysim_hold_ok(void)
+{
+    if (!K.available)
+        return WINSIM_ERR_PARAM;
+    uint8_t ch = K.ch;
+    switch (K.hold[ch]) {
+    case KS_HOLD_NO_HW:
+        return WINSIM_ERR_UNSUPPORTED;
+    case KS_HOLD_ON:
+    case KS_HOLD_OPEN:
+    case KS_HOLD_INACCURATE:
+        winsim_idle_release(&ws, ch);
+        K.hold[ch] = KS_HOLD_OFF;
+        return WINSIM_OK;
+    default:
+        break;
+    }
+    if (K.activity != KS_IDLE)
+        stop_activity();
+    K.hold[ch] = KS_HOLD_NONE;
+    hold_retry[ch] = 0u;
+    if (!K.tables[ch].valid || !K.tables[ch].idle_mv)
+        return WINSIM_ERR_PARAM;
+    return hold_arm(ch);
 }
 
 static void stop_activity(void)
@@ -174,7 +314,10 @@ winsim_status_t keysim_select(uint8_t ch)
     winsim_status_t rc = winsim_select_channel(&ws, ch, true, &r);
     sync_channel();
     K.supply_ok = ws.last_open_mv != 0u;
-    return note(rc);
+    note(rc);
+    if (rc == WINSIM_OK && K.hold[ch] == KS_HOLD_NONE)
+        hold_arm(ch);
+    return rc;
 }
 
 winsim_status_t keysim_recalibrate(void)
@@ -262,8 +405,11 @@ winsim_status_t keysim_clear_ovp(void)
     winsim_status_t rc = winsim_clear_ovp(&ws);
     K.last_status = rc;
     K.port_mv = ws.current_state.measured_mv;
-    if (rc == WINSIM_OK)
+    if (rc == WINSIM_OK) {
         K.ovp = false;
+        for (unsigned k = 0; k < WINSIM_NUM_CH; k++)
+            hold_retry[k] = 0u;
+    }
     return rc;
 }
 
@@ -327,6 +473,7 @@ void keysim_table_loaded(uint8_t ch, const ks_table_t *table)
     K.tables[ch] = *table;
     K.sd_saved[ch] = true;
     K.sd_error[ch] = 0;
+    hold_table_changed(ch);
 }
 
 bool keysim_resave(void)
@@ -362,6 +509,12 @@ winsim_status_t keysim_learn_start(void)
     if (!K.available || K.ovp)
         return K.ovp ? WINSIM_ERR_OVERVOLTAGE : WINSIM_ERR_PARAM;
     stop_activity();
+    /* 学的是原车开关：本板这一路的空闲支路先断开。 */
+    if (K.hold[K.ch] != KS_HOLD_OFF && K.hold[K.ch] != KS_HOLD_NO_HW) {
+        winsim_idle_release(&ws, K.ch);
+        K.hold[K.ch] = KS_HOLD_NONE;
+        hold_retry[K.ch] = HOLD_RETRY;
+    }
     winsim_status_t rc = winsim_probe_open_voltage(&ws, &idle);
     note(rc);
     K.port_mv = idle;
@@ -413,11 +566,13 @@ bool keysim_learn_save(void)
     memset(t, 0, sizeof *t);
     t->valid = true;
     snprintf(t->name, sizeof t->name, "学习 · K%u", (unsigned)K.ch + 1u);
+    t->idle_mv = K.learn_idle_mv;
     t->n = K.learn_n;
     memcpy(t->keys, K.learn_keys, sizeof t->keys);
     K.learn_n = 0u;
     keysim_learn_stop();
     request_save(K.ch);
+    hold_table_changed(K.ch);
     return true;
 }
 
@@ -533,8 +688,10 @@ bool keysim_scan_save(void)
     if (!K.available || !K.scan_done || K.scan_n == 0u)
         return false;
     ks_table_t *t = &K.tables[K.ch];
+    uint16_t idle_keep = t->valid ? t->idle_mv : 0u;   /* 扫描时原车开关不在，空闲电压沿用学习的 */
     memset(t, 0, sizeof *t);
     t->valid = true;
+    t->idle_mv = idle_keep;
     snprintf(t->name, sizeof t->name, "扫描 · K%u", (unsigned)K.ch + 1u);
     /* 第 i 个门限以下、第 i+1 个门限以上是状态 edges[i].to 的区间，取中点。 */
     for (unsigned i = 0; i < K.scan_n && t->n < KS_MAX_KEYS; i++) {
@@ -549,6 +706,7 @@ bool keysim_scan_save(void)
     }
     K.scan_done = false;
     request_save(K.ch);
+    hold_table_changed(K.ch);
     return true;
 }
 
@@ -585,10 +743,13 @@ void keysim_tick(uint32_t ms)
             idle_t = 0u;
             winsim_status_t rc = winsim_measure(&ws, &mv);
             K.port_mv = mv;
-            if (rc == WINSIM_ERR_OVERVOLTAGE)
-                K.ovp = true;
-            else
-                K.supply_ok = mv >= ws.cfg.min_open_mv || (K.supply_ok && mv > 0u);
+            if (rc == WINSIM_ERR_OVERVOLTAGE) {
+                note(rc);
+                break;
+            }
+            K.supply_ok = mv >= ws.cfg.min_open_mv || (K.supply_ok && mv > 0u);
+            if (!K.ovp)
+                hold_background();
         }
         break;
     }

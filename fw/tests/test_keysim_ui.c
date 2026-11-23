@@ -340,6 +340,81 @@ static void sd_persistence(void)
     CHECK(keysim_get()->sd_loaded && !keysim_get()->tables[1].valid && !keysim_get()->tables[2].valid);
 }
 
+/* 空闲保持：K4 的原车开关松开时带 10 kΩ。学完拔掉开关，APM 仍看到空闲；按键后回到空闲；
+ * 接回原车开关时后台发现接口被拉低，自动断开。默认关闭，要用户打开。 */
+static void idle_hold(void)
+{
+    home_entry_and_overview();
+    env_cmd("ks_idle_r", 3, 10000);
+    run(400);
+    tap("K4");
+    learn_positions(3, 2);
+    run(50);
+    const keysim_t *ks = keysim_get();
+    uint16_t idle = ks->tables[3].idle_mv;
+    CHECK(idle > 4000u && idle < 4150u);           /* 10 kΩ 对 2.2 kΩ 上拉 */
+    CHECK(ks->hold[3] == KS_HOLD_OFF && has("关 · 原车开关拔掉后 OK 打开"));
+    run(1000);
+    CHECK(ks->hold[3] == KS_HOLD_OFF);              /* 没打开就不动 */
+
+    tap("空闲保持");                                /* 原车开关还接着：打开，但现在不需要接 */
+    CHECK(ks->hold[3] == KS_HOLD_OPEN && toast_has("现在不需要接"));
+    env_cmd("ks_attach", 3, 0);                     /* 拔掉原车开关 */
+    run(1500);                                      /* 后台发现开路电压升高，自动接通 */
+    CHECK(ks->hold[3] == KS_HOLD_ON && has("保持 4."));
+    run(400);
+    CHECK(udiff(ks->port_mv, idle) < 15u && keysim_apm_state() == 0);   /* APM 看到的是空闲 */
+
+    tap("上升");
+    CHECK(ks->pressed == 0 && keysim_apm_state() == 1);
+    CHECK(udiff(ks->port_mv, ks->tables[3].keys[0].mv) < 25u);
+    run(350);
+    CHECK(ks->pressed == -1);
+    run(400);
+    CHECK(udiff(ks->port_mv, idle) < 15u && keysim_apm_state() == 0);   /* 松开回到空闲，不是开路 */
+    back();
+    CHECK(has("保持空闲"));
+    tap("K4");                                      /* 重新选这一路：辨识时空闲支路一直接着 */
+    CHECK(ks->hold[3] == KS_HOLD_ON && keysim_apm_state() == 0);
+    CHECK(ks->pullup[3] > 2150.0f && ks->pullup[3] < 2250.0f);
+
+    env_cmd("ks_attach", 3, 1);                     /* 接回原车开关 */
+    run(1500);
+    CHECK(ks->hold[3] == KS_HOLD_LOST && has("接口被拉低"));
+    tap("空闲保持");                                /* 重新建立：原车开关在线，不需要接 */
+    CHECK(ks->hold[3] == KS_HOLD_OPEN);
+    tap("空闲保持");                                /* 再按：关 */
+    CHECK(ks->hold[3] == KS_HOLD_OFF && toast_has("空闲保持已关闭"));
+}
+
+/* 另一台 APM 用 10 kΩ 上拉：辨识出上拉，学到的每一档都能原样发出，APM 判定和按原车开关时相同。 */
+static void other_pullup(void)
+{
+    home_entry_and_overview();
+    env_cmd("ks_pullup", 0, 10000);
+    run(400);
+    tap("K1");
+    const keysim_t *ks = keysim_get();
+    CHECK(ks->pullup[0] > 9800.0f && ks->pullup[0] < 10200.0f && toast_has("APM 上拉约"));
+    learn_positions(0, 4);
+    run(50);
+    touch(1);                                       /* 保持模式 */
+    for (int i = 0; i < 4; i++) {
+        env_cmd("ks_switch", 0, i + 1);             /* 原车开关这一档时 APM 的判定 */
+        run(10);
+        int expect = keysim_apm_state();
+        env_cmd("ks_attach", 0, 0);
+        run(400);
+        tap(ks->tables[0].keys[i].name);
+        CHECK(ks->pressed == i && keysim_apm_state() == expect);
+        CHECK(udiff(ks->port_mv, ks->tables[0].keys[i].mv) < 35u);
+        tap(ks->tables[0].keys[i].name);            /* 松开 */
+        env_cmd("ks_attach", 0, 1);
+        env_cmd("ks_switch", 0, 0);
+        run(400);
+    }
+}
+
 int main(void)
 {
     home_entry_and_overview();
@@ -349,6 +424,8 @@ int main(void)
     overvoltage();
     leaves_release();
     sd_persistence();
+    idle_hold();
+    other_pullup();
     printf("Key simulation UI: %u checks passed (simulated APM, not hardware)\n", checks);
     return 0;
 }

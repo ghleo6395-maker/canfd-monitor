@@ -5,11 +5,13 @@
  *   CANFD-APMKEY 1
  *   channel=2
  *   name=学习 · K2
+ *   idle=4078
  *   key=上升,3480,5100
  *   key=对地短路,0,-
  *
  * 第一行固定；channel 只作记录，读取时以文件名为准；name 必填，最多 23 字节；
- * key=名称,接口电压 mV,开关电阻 Ω（不知道写 -），名称最多 15 字节、不含逗号，电压 0–5000，
+ * idle=学到的空闲电压 mV（可选，1–16000，最多一行）：原车开关不在时设备按它保持空闲；
+ * key=名称,接口电压 mV,开关电阻 Ω（不知道写 -），名称最多 15 字节、不含逗号，电压 0–16000，
  * 1–8 个键。允许 \r\n 换行、开头的 UTF-8 BOM、空行和 # 开头的注释行；其它内容一律拒绝。
  * 纯函数，不碰硬件，模拟器和板级存储共用。 */
 #ifndef KEYSIM_FILE_H
@@ -22,7 +24,7 @@
 
 #define KS_FILE_DIR       "APMKEY"
 #define KS_FILE_MAX_BYTES 1024u
-#define KS_FILE_MAX_MV    5000u
+#define KS_FILE_MAX_MV    16000u   /* 上拉到蓄电池电压的车型也放得下 */
 
 typedef enum {
     KS_FILE_OK = 0,
@@ -32,7 +34,7 @@ typedef enum {
     KS_FILE_ERR_SYNTAX = -4,    /* 不认识的行或字段格式不对 */
     KS_FILE_ERR_NAME = -5,      /* 名称为空、太长、含逗号或控制字符、不是合法 UTF-8 */
     KS_FILE_ERR_RANGE = -6,     /* 电压、电阻或通道超出范围 */
-    KS_FILE_ERR_COUNT = -7,     /* 没有键，或超过 8 个，或 name 出现多次 */
+    KS_FILE_ERR_COUNT = -7,     /* 没有键，或超过 8 个，或 name、idle 出现多次 */
     KS_FILE_ERR_SIZE = -8       /* 文件超过 1024 字节 */
 } ks_file_result_t;
 

@@ -24,6 +24,7 @@ static ks_table_t sample(void)
         t.keys[i].ohm = ohm[i];
     }
     t.n = 5;
+    t.idle_mv = 4978;
     return t;
 }
 
@@ -41,10 +42,10 @@ int main(void)
     /* 往返 */
     CHECK(ks_table_encode(&t, 1, buf, sizeof buf, &len) == KS_FILE_OK);
     buf[len] = '\0';
-    CHECK(!strncmp(buf, "CANFD-APMKEY 1\nchannel=2\nname=学习 · K2\nkey=上升,3480,5100\n", 63));
+    CHECK(!strncmp(buf, "CANFD-APMKEY 1\nchannel=2\nname=学习 · K2\nidle=4978\nkey=上升,3480,5100\n", 73));
     CHECK(strstr(buf, "key=对地短路,0,-\n") && strstr(buf, "key=下降,1550,998\n"));
     CHECK(ks_table_decode(buf, len, &back) == KS_FILE_OK && back.valid && back.n == 5);
-    CHECK(!strcmp(back.name, t.name));
+    CHECK(!strcmp(back.name, t.name) && back.idle_mv == 4978u);
     for (unsigned i = 0; i < 5; i++) {
         CHECK(!strcmp(back.keys[i].name, t.keys[i].name) && back.keys[i].mv == t.keys[i].mv);
         CHECK(i == 4 ? isnan(back.keys[i].ohm) : fabsf(back.keys[i].ohm - roundf(t.keys[i].ohm)) < 0.01f);
@@ -53,6 +54,14 @@ int main(void)
     /* 电脑上编辑过：BOM、\r\n、注释、空行、channel 与文件名不同都能读 */
     CHECK(decode_str("\xEF\xBB\xBF" "CANFD-APMKEY 1\r\n# 主驾车窗\r\n\r\nchannel=4\r\nname=车型 C\r\nkey=上升,3500,-\r\n", &back) == KS_FILE_OK);
     CHECK(back.valid && back.n == 1 && !strcmp(back.name, "车型 C") && back.keys[0].mv == 3500 && isnan(back.keys[0].ohm));
+    CHECK(back.idle_mv == 0u);                                                     /* 没写 idle：不保持 */
+    CHECK(decode_str("CANFD-APMKEY 1\nname=x\nidle=12500\nkey=a,13800,-\n", &back) == KS_FILE_OK &&
+          back.idle_mv == 12500u && back.keys[0].mv == 13800u);                     /* 上拉到 12 V 的车 */
+    t.idle_mv = 0;                                                                 /* 不写出 idle 行 */
+    CHECK(ks_table_encode(&t, 1, buf, sizeof buf, &len) == KS_FILE_OK);
+    buf[len] = '\0';
+    CHECK(!strstr(buf, "idle="));
+    t.idle_mv = 4978;
     CHECK(decode_str("CANFD-APMKEY 1\nname=x\nkey=a,5000,0", &back) == KS_FILE_OK && back.keys[0].mv == 5000);   /* 最后一行没换行 */
 
     /* 坏文件 */
@@ -64,7 +73,11 @@ int main(void)
         { "CANFD-APMKEY 1\nname=x\n", KS_FILE_ERR_COUNT },                         /* 没有键 */
         { "CANFD-APMKEY 1\nname=x\nname=y\nkey=a,1,-\n", KS_FILE_ERR_COUNT },
         { "CANFD-APMKEY 1\nname=\nkey=a,1,-\n", KS_FILE_ERR_NAME },
-        { "CANFD-APMKEY 1\nname=x\nkey=a,5001,-\n", KS_FILE_ERR_RANGE },
+        { "CANFD-APMKEY 1\nname=x\nkey=a,16001,-\n", KS_FILE_ERR_RANGE },
+        { "CANFD-APMKEY 1\nname=x\nidle=0\nkey=a,1,-\n", KS_FILE_ERR_RANGE },
+        { "CANFD-APMKEY 1\nname=x\nidle=16001\nkey=a,1,-\n", KS_FILE_ERR_RANGE },
+        { "CANFD-APMKEY 1\nname=x\nidle=4000\nidle=4100\nkey=a,1,-\n", KS_FILE_ERR_COUNT },
+        { "CANFD-APMKEY 1\nname=x\nidle=-\nkey=a,1,-\n", KS_FILE_ERR_SYNTAX },
         { "CANFD-APMKEY 1\nname=x\nkey=a,-1,-\n", KS_FILE_ERR_SYNTAX },
         { "CANFD-APMKEY 1\nname=x\nkey=a,1\n", KS_FILE_ERR_SYNTAX },
         { "CANFD-APMKEY 1\nname=x\nkey=a,1,2,3\n", KS_FILE_ERR_SYNTAX },
@@ -104,7 +117,7 @@ int main(void)
     snprintf(bad_t.keys[0].name, sizeof bad_t.keys[0].name, "a,b");
     CHECK(ks_table_encode(&bad_t, 0, buf, sizeof buf, &len) == KS_FILE_ERR_NAME);
     bad_t = t;
-    bad_t.keys[2].mv = 6000;
+    bad_t.keys[2].mv = 16001;
     CHECK(ks_table_encode(&bad_t, 0, buf, sizeof buf, &len) == KS_FILE_ERR_NAME);
     CHECK(ks_table_encode(&t, 0, buf, 40, &len) == KS_FILE_ERR_SPACE);
     CHECK(ks_table_encode(&t, 4, buf, sizeof buf, &len) == KS_FILE_ERR_ARGUMENT);
@@ -113,7 +126,7 @@ int main(void)
     snprintf(full.name, sizeof full.name, "一二三四五六七");                    /* 21 字节 */
     for (unsigned i = 0; i < KS_MAX_KEYS; i++) {
         snprintf(full.keys[i].name, sizeof full.keys[i].name, "一键上升%u", i);   /* 13 字节 */
-        full.keys[i].mv = 5000;
+        full.keys[i].mv = 16000;
         full.keys[i].ohm = 99999999.0f;
     }
     full.n = KS_MAX_KEYS;

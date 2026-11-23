@@ -541,8 +541,8 @@ static void go_home(void)
 /* 每页条目数（给光标限幅） */
 static int file_count(void) { return port_sd_file_count(); }
 
-/* 按键模拟通道页的行布局：接口、按法、各键（没有键值表时一行提示）、手动、松开、学习、扫描、串联电阻。 */
-typedef struct { int keys0, nkeys, manual, release, learn, scan, series, table, total; } keych_rows_t;
+/* 按键模拟通道页的行布局：接口、按法、各键（没有键值表时一行提示）、手动、松开、学习、扫描、辨识、空闲保持、键值表。 */
+typedef struct { int keys0, nkeys, manual, release, learn, scan, series, hold, table, total; } keych_rows_t;
 static keych_rows_t keych_rows(void)
 {
     const keysim_t *k = keysim_get();
@@ -555,7 +555,8 @@ static keych_rows_t keych_rows(void)
     r.learn = r.release + 1;
     r.scan = r.learn + 1;
     r.series = r.scan + 1;
-    r.table = r.series + 1;
+    r.hold = r.series + 1;
+    r.table = r.hold + 1;
     r.total = r.table + 1;
     return r;
 }
@@ -1792,7 +1793,9 @@ static void ks_report(winsim_status_t rc, const char *ok_text)
     case WINSIM_ERR_OVERVOLTAGE: show_toast("接口过压，已断开电阻阵；排除后在总览里重新检测"); break;
     case WINSIM_ERR_NO_SUPPLY:   show_toast("APM 未上电：先在发送报文页发唤醒报文"); break;
     case WINSIM_ERR_VERIFY_FAIL: show_toast("回读和目标相差超过 80 mV，检查接线"); break;
-    case WINSIM_ERR_CALIBRATION: show_toast("串联电阻标定失败，检查保险丝和接线"); break;
+    case WINSIM_ERR_CALIBRATION: show_toast("辨识失败：串联电阻不合理，检查保险丝和接线"); break;
+    case WINSIM_ERR_RANGE:       show_toast("空闲电阻或电流超出空闲支路的范围，没有接通"); break;
+    case WINSIM_ERR_UNSUPPORTED: show_toast("本板没有空闲保持硬件（第 12 页第 3 版）"); break;
     default:                     show_toast("现在不能执行这一步"); break;
     }
 }
@@ -1807,10 +1810,12 @@ static void key_keysim(key_id_t k, gesture_t g)
     if (c < ks->channels) {
         winsim_status_t rc = keysim_select((uint8_t)c);
         if (rc == WINSIM_OK) {
-            snprintf(t, sizeof t, "已接通 K%d，串联电阻 %.1f 欧", c + 1, (double)ks->r_series[c]);
+            char pu[24];
+            fmt_ohm_cn(pu, sizeof pu, ks->pullup[c]);
+            snprintf(t, sizeof t, "已接通 K%d · APM 上拉约 %s · 串联 %.1f 欧", c + 1, pu, (double)ks->r_series[c]);
             show_toast(t);
         } else if (rc == WINSIM_ERR_NO_SUPPLY) {
-            snprintf(t, sizeof t, "已接通 K%d；APM 未上电，串联电阻没有标定", c + 1);
+            snprintf(t, sizeof t, "已接通 K%d；APM 未上电，没有辨识", c + 1);
             show_toast(t);
         } else {
             ks_report(rc, NULL);
@@ -1824,7 +1829,7 @@ static void key_keysim(key_id_t k, gesture_t g)
             ks_report(keysim_clear_ovp(), "电压正常，已解除过压锁定");
     } else {
         keysim_release();
-        show_toast("已全部松开，接口回到高阻");
+        show_toast("已全部松开");
     }
 }
 
@@ -1857,7 +1862,7 @@ static void key_keych(key_id_t k, gesture_t g)
         ks_report(keysim_manual_toggle(), NULL);
     } else if (c == r.release) {
         keysim_release();
-        show_toast("已全部松开，接口回到高阻");
+        show_toast(ks->hold[ks->ch] == KS_HOLD_ON ? "已松开，接口回到空闲电压" : "已全部松开，接口回到高阻");
     } else if (c == r.learn) {
         cursor[PG_KEYLEARN] = 0;
         go(PG_KEYLEARN);
@@ -1872,11 +1877,27 @@ static void key_keych(key_id_t k, gesture_t g)
     } else if (c == r.series) {
         winsim_status_t rc = keysim_recalibrate();
         if (rc == WINSIM_OK) {
-            snprintf(t, sizeof t, "K%u 串联电阻 %.1f 欧", (unsigned)ks->ch + 1u, (double)ks->r_series[ks->ch]);
+            char pu[24];
+            fmt_ohm_cn(pu, sizeof pu, ks->pullup[ks->ch]);
+            snprintf(t, sizeof t, "K%u APM 上拉约 %s · 串联 %.1f 欧", (unsigned)ks->ch + 1u, pu,
+                     (double)ks->r_series[ks->ch]);
             show_toast(t);
         } else {
             ks_report(rc, NULL);
         }
+    } else if (c == r.hold) {
+        winsim_status_t rc = keysim_hold_ok();
+        uint8_t h = ks->hold[ks->ch];
+        if (h == KS_HOLD_OFF)
+            show_toast("空闲保持已关闭；接回原车开关前先关");
+        else if (h == KS_HOLD_ON)
+            show_toast("已接通空闲支路，保持学到的空闲电压");
+        else if (h == KS_HOLD_OPEN)
+            show_toast("已打开：现在不需要接（原车开关在线或空闲为开路），拔掉原车开关后自动接通");
+        else if (rc == WINSIM_ERR_PARAM && !ks->tables[ks->ch].idle_mv)
+            show_toast("这张键值表没有空闲电压：用原车开关重新学习一次");
+        else
+            ks_report(rc, NULL);
     }
 }
 
@@ -2955,8 +2976,9 @@ static void items_keysim(jw_t *j)
         const char *state = on ? (ks->pressed != -1 ? "按下中" : "已接通") : "断开";
         snprintf(l, sizeof l, "K%d", c + 1);
         if (t->valid)
-            snprintf(v, sizeof v, "%s · %s · %u 个键值 · %s", state, t->name, (unsigned)t->n,
-                     ks->sd_saved[c] ? "已存 SD" : "未存 SD");
+            snprintf(v, sizeof v, "%s · %s · %u 个键值 · %s%s", state, t->name, (unsigned)t->n,
+                     ks->sd_saved[c] ? "已存 SD" : "未存 SD", ks->hold[c] == KS_HOLD_ON ? " · 保持空闲" :
+                     ks->hold[c] == KS_HOLD_LOST ? " · 空闲保持已断开" : "");
         else
             snprintf(v, sizeof v, "%s · 未学习", state);
         item(j, l, v, on ? IF_ACTIVE : 0);
@@ -3003,9 +3025,38 @@ static void items_keych(jw_t *j)
     item(j, "全部松开", "回到高阻", ks->pressed != -1 ? IF_ACTION : IF_DISABLED);
     item(j, "学习键值", "原车开关接着时用：设备只测量", IF_ACTION);
     item(j, "门限扫描", "没有原车开关时用：需要 APM 开关状态", IF_ACTION);
-    snprintf(v, sizeof v, "%.1f 欧（%s）· OK 重新标定", (double)ks->r_series[ks->ch],
-             ks->calibrated[ks->ch] ? "已标定" : "未标定，用默认值");
-    item(j, "串联电阻", v, ks->calibrated[ks->ch] ? IF_ACTION : IF_WARN);
+    if (ks->pullup[ks->ch] > 0.0f) {
+        fmt_ohm_cn(a, sizeof a, ks->pullup[ks->ch]);
+        snprintf(v, sizeof v, "APM 上拉约 %s%s · 串联 %.1f 欧 · OK 重新辨识", a,
+                 ks->pulsed[ks->ch] ? "（脉冲供电）" : "", (double)ks->r_series[ks->ch]);
+    } else {
+        snprintf(v, sizeof v, "还没辨识，按 2.2 千欧估算 · OK 辨识");
+    }
+    item(j, "辨识", v, ks->calibrated[ks->ch] ? IF_ACTION : IF_WARN);
+    {
+        uint8_t h = ks->hold[ks->ch];
+        int fl = IF_ACTION;
+        fmt_volt(a, sizeof a, h == KS_HOLD_OPEN ? t->idle_mv : ks->hold_mv[ks->ch]);
+        switch (h) {
+        case KS_HOLD_NO_HW:      snprintf(v, sizeof v, "本板没有这部分硬件"); fl = IF_DISABLED; break;
+        case KS_HOLD_OFF:        snprintf(v, sizeof v, "关 · 原车开关拔掉后 OK 打开"); break;
+        case KS_HOLD_NONE:
+            if (!t->valid || !t->idle_mv) {
+                snprintf(v, sizeof v, "已打开 · 键值表没有空闲电压，用原车开关学习一次");
+                fl = IF_WARN;
+            } else {
+                snprintf(v, sizeof v, "已打开 · 等 APM 上电后建立 · OK 立即建立");
+            }
+            break;
+        case KS_HOLD_OPEN:       snprintf(v, sizeof v, "已打开 · 现在不需要（空闲 %s 由原车开关或开路提供）· OK 关", a); fl = IF_ACTIVE; break;
+        case KS_HOLD_ON:         snprintf(v, sizeof v, "保持 %s · OK 关（接回原车开关前先关）", a); fl = IF_ACTIVE; break;
+        case KS_HOLD_RANGE:      snprintf(v, sizeof v, "超出范围，没有接通 · OK 重试"); fl = IF_WARN; break;
+        case KS_HOLD_INACCURATE: snprintf(v, sizeof v, "保持 %s，偏差超过 80 mV · OK 关", a); fl = IF_WARN; break;
+        case KS_HOLD_LOST:       snprintf(v, sizeof v, "接口被拉低（原车开关接回？），已断开 · OK 重新建立"); fl = IF_WARN; break;
+        default:                 snprintf(v, sizeof v, "?"); break;
+        }
+        item(j, "空闲保持", v, fl);
+    }
     int16_t err = ks->sd_error[ks->ch];
     if (!t->valid)
         item(j, "键值表", "还没有", IF_DISABLED);
